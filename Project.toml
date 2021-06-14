@@ -3,9 +3,6 @@ uuid = "12163351-a1f7-4615-9b0f-4e5f79a1d807"
 authors = ["heetbeet heetbeet@users.noreply.github.com and contributors"]
 version = "0.1.0"
 
-#[deps]
-#FromFile = "ff7dd447-1dcb-4ce3-b8ac-22a812192de7"
-
 [compat]
 julia = "1"
 
