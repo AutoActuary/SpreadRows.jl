@@ -174,38 +174,3 @@ DiGraph(mapping::Dict{T,<:Union{Vector{T},Set{T}}}) where T  = begin
 
 	graph
 end
-
-#=
-# Example of finding a sequence over a graph.nodedict
-begin
-	edges = [
-		(:x1, :x2),
-		(:x1, :x1),
-		(:x2, :x3),
-		(:x3, :x4),
-		(:x4, :x5),
-		(:x5, :x6),
-		(:x5, :x8),
-		(:x8, :x3),
-		(:x8, :x9),
-		(:x6, :x7)]
-	
-	Tₑ = Union{[Union{typeof.(e)...} for e in edges]...}
-
-	graph.nodedict = Dict{Tₑ,DiNode{Tₑ}}()
-	for (i,j) ∈ edges
-		if ! haskey(graph.nodedict, i)  graph.nodedict[i] = DiNode{Tₑ}() end
-		if ! haskey(graph.nodedict, j)  graph.nodedict[j] = DiNode{Tₑ}() end
-
-		push!(graph.nodedict[i].out, j)
-		push!(graph.nodedict[j].in, i)
-
-	end
-
-	graph.nodedict
-
-end
-
-println(traversalsequence!(graph.nodedict))
-=#
-
