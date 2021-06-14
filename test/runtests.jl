@@ -41,4 +41,19 @@ using Test
     @test all([graph₁.nodedict[k].in == graph₂.nodedict[k].in for k ∈ keys(graph₁.nodedict)])
 
     @test RowSheets.traversalsequence(graph₁) == [[:x1], [:x2], [:x5, :x3, :x8, :x4], [:x9], [:x6], [:x7]]
+
+
+    deps = Dict{Symbol, Vector{Symbol}}(
+                :x1 => [:x1, :x2, ],
+                :x2 => [:x3],
+                :x3 => [:x4],
+                :x4 => [:x5],
+                :x5 => [:x6, :x8],
+                :x6 => [:x7],
+                :x8 => [:x3, :x9],
+                :x10 => []
+                )
+    graph₃ = RowSheets.DiGraph(deps)
+    @test RowSheets.traversalsequence(graph₃) == [[:x10], [:x1], [:x2], [:x5, :x3, :x8, :x4], [:x9], [:x6], [:x7]]
+
 end;

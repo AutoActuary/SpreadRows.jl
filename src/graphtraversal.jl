@@ -163,8 +163,9 @@ DiGraph(mapping::Dict{T,<:Union{Vector{T},Set{T}}}) where T  = begin
 	graph = DiGraph{T}()
 
 	for (i, outs) ∈ mapping
+		if ! haskey(graph.nodedict, i)  graph.nodedict[i] = DiNode{T}() end
+		
 		for j ∈ outs
-			if ! haskey(graph.nodedict, i)  graph.nodedict[i] = DiNode{T}() end
 			if ! haskey(graph.nodedict, j)  graph.nodedict[j] = DiNode{T}() end
 
 			push!(graph.nodedict[i].out, j)

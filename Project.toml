@@ -1,7 +1,7 @@
 name = "RowSheets"
 uuid = "c72f0762-cde9-48ab-9c04-b95b1f9f3cc1"
 authors = ["heetbeet heetbeet@users.noreply.github.com and contributors"]
-version = "0.1.0"
+version = "0.1.1"
 
 [compat]
 julia = "1"
