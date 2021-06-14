@@ -6,9 +6,15 @@ struct DiNode{T}
 end
 
 
-trim_sequence(graph::Dict{T,DiNode{T}}) where T = trim_sequence!(deepcopy(graph))
+struct DiGraph{T}
+	nodedict::Dict{T,DiNode{T}}
+	DiGraph{T}() where T = new{T}(Dict{T,DiNode{T}}())
+end
 
-trim_sequence!(graph::Dict{T,DiNode{T}}) where T = begin 
+
+traversalsequence(graph::DiGraph{T}) where T = traversalsequence!(deepcopy(graph))
+
+traversalsequence!(graph::DiGraph{T})  where T = begin 
 
 	headseq = Vector{T}()
 	tailseq = Vector{T}()
@@ -17,13 +23,13 @@ trim_sequence!(graph::Dict{T,DiNode{T}}) where T = begin
 
 
 	# viable? then add to queue
-	lazyaddtoqueue!(id) = if length(graph[id].in)*length(graph[id].out) == 0
+	lazyaddtoqueue!(id) = if length(graph.nodedict[id].in)*length(graph.nodedict[id].out) == 0
 		push!(queue, id)
 	end
 
 	# !!! only valid if there are no branches or roots left
 	findcycleintrimmedgraph() = begin
-		id, node = first(graph)
+		id, node = first(graph.nodedict)
 		
 		seqset = Set{T}()
 		seq = Vector{T}() # use like ordered set
@@ -32,7 +38,7 @@ trim_sequence!(graph::Dict{T,DiNode{T}}) where T = begin
 		while !(idᵢ ∈ seqset)
 			push!(seqset, idᵢ)
 			push!(seq, idᵢ)
-			idᵢ = first(graph[idᵢ].out)
+			idᵢ = first(graph.nodedict[idᵢ].out)
 		end
 
 		# Only keep the cyclic part
@@ -43,7 +49,7 @@ trim_sequence!(graph::Dict{T,DiNode{T}}) where T = begin
 		end
 		
 		raise(ErrorException(
-				"Could not find cycle in graph $(graph) starting from $(id)"))
+				"Could not find cycle in graph.nodedict $(graph.nodedict) starting from $(id)"))
 		return seq
 	end
 
@@ -53,31 +59,31 @@ trim_sequence!(graph::Dict{T,DiNode{T}}) where T = begin
 		nodeₙ = DiNode{T}()
 
 		for idᵢ ∈ ids
-			nodeᵢ = graph[idᵢ]
+			nodeᵢ = graph.nodedict[idᵢ]
 
 			for idⱼ ∈ nodeᵢ.out
 				if idⱼ != idₙ
 					push!(nodeₙ.out, idⱼ)
-					pop!(graph[idⱼ].in, idᵢ) 
-					push!(graph[idⱼ].in, idₙ)
+					pop!(graph.nodedict[idⱼ].in, idᵢ) 
+					push!(graph.nodedict[idⱼ].in, idₙ)
 				end
 			end
 
 			for idⱼ ∈ nodeᵢ.in
 				if idⱼ != idₙ
 					push!(nodeₙ.in, idⱼ)
-					pop!(graph[idⱼ].out, idᵢ) 
-					push!(graph[idⱼ].out, idₙ)
+					pop!(graph.nodedict[idⱼ].out, idᵢ) 
+					push!(graph.nodedict[idⱼ].out, idₙ)
 				end
 			end
 
 			# remove idᵢ from collective histroy
-			pop!(graph, idᵢ)
+			pop!(graph.nodedict, idᵢ)
 			if idᵢ ∈ nodeₙ.out pop!(nodeₙ.out, idᵢ) end
 			if idᵢ ∈ nodeₙ.in pop!(nodeₙ.in, idᵢ) end
 		end
 
-		graph[idₙ] = nodeₙ
+		graph.nodedict[idₙ] = nodeₙ
 		strongclusters[idₙ] = Set{T}(ids) ∪ get(strongclusters, idₙ, [])
 
 		# merge cluster with other strong clusters
@@ -88,11 +94,11 @@ trim_sequence!(graph::Dict{T,DiNode{T}}) where T = begin
 		return idₙ
 	end
 
-	for (id, node) ∈ graph
+	for (id, node) ∈ graph.nodedict
 		lazyaddtoqueue!(id)
 	end
 
-	while(length(graph) != 0)
+	while(length(graph.nodedict) != 0)
 
 		if length(queue) == 0
 			# find a cycle and merge it
@@ -102,25 +108,25 @@ trim_sequence!(graph::Dict{T,DiNode{T}}) where T = begin
 
 		else
 			idᵢ=pop!(queue)
-			(nodeᵢ = get(graph, idᵢ, nothing)) === nothing && continue
+			(nodeᵢ = get(graph.nodedict, idᵢ, nothing)) === nothing && continue
 
 			# trim either a root or a branch
 			if length(nodeᵢ.in) == 0
 				push!(headseq, idᵢ)
 				for idⱼ ∈ nodeᵢ.out
-					pop!(graph[idⱼ].in, idᵢ)
+					pop!(graph.nodedict[idⱼ].in, idᵢ)
 					lazyaddtoqueue!(idⱼ)
 				end
 
 			elseif length(nodeᵢ.out) == 0
 				insert!(tailseq, 1, idᵢ)
 				for idⱼ ∈ nodeᵢ.in
-					pop!(graph[idⱼ].out, idᵢ)
+					pop!(graph.nodedict[idⱼ].out, idᵢ)
 					lazyaddtoqueue!(idⱼ)
 				end
 			end
 
-			pop!(graph, idᵢ)
+			pop!(graph.nodedict, idᵢ)
 
 		end
 	end
@@ -130,7 +136,7 @@ trim_sequence!(graph::Dict{T,DiNode{T}}) where T = begin
 		if haskey(strongclusters, i)
 			push!(sequence, collect(strongclusters[i]))
 		else
-			push!(sequence, i)
+			push!(sequence, [i])
 		end		
 	end
 
@@ -138,9 +144,39 @@ trim_sequence!(graph::Dict{T,DiNode{T}}) where T = begin
 end
 
 
+DiGraph(edges::Vector{<:Union{Vector{T}, Tuple{T, T}}}) where T= begin
+	graph = DiGraph{T}()
+	for (i,j) ∈ edges
+		if ! haskey(graph.nodedict, i)  graph.nodedict[i] = DiNode{T}() end
+		if ! haskey(graph.nodedict, j)  graph.nodedict[j] = DiNode{T}() end
+
+		push!(graph.nodedict[i].out, j)
+		push!(graph.nodedict[j].in, i)
+
+	end
+
+	graph
+end
+
+
+DiGraph(mapping::Dict{T,<:Union{Vector{T},Set{T}}}) where T  = begin
+	graph = DiGraph{T}()
+
+	for (i, outs) ∈ mapping
+		for j ∈ outs
+			if ! haskey(graph.nodedict, i)  graph.nodedict[i] = DiNode{T}() end
+			if ! haskey(graph.nodedict, j)  graph.nodedict[j] = DiNode{T}() end
+
+			push!(graph.nodedict[i].out, j)
+			push!(graph.nodedict[j].in, i)
+		end
+	end
+
+	graph
+end
 
 #=
-# Example of finding a sequence over a graph
+# Example of finding a sequence over a graph.nodedict
 begin
 	edges = [
 		(:x1, :x2),
@@ -156,20 +192,20 @@ begin
 	
 	Tₑ = Union{[Union{typeof.(e)...} for e in edges]...}
 
-	graph = Dict{Tₑ,DiNode{Tₑ}}()
+	graph.nodedict = Dict{Tₑ,DiNode{Tₑ}}()
 	for (i,j) ∈ edges
-		if ! haskey(graph, i)  graph[i] = DiNode{Tₑ}() end
-		if ! haskey(graph, j)  graph[j] = DiNode{Tₑ}() end
+		if ! haskey(graph.nodedict, i)  graph.nodedict[i] = DiNode{Tₑ}() end
+		if ! haskey(graph.nodedict, j)  graph.nodedict[j] = DiNode{Tₑ}() end
 
-		push!(graph[i].out, j)
-		push!(graph[j].in, i)
+		push!(graph.nodedict[i].out, j)
+		push!(graph.nodedict[j].in, i)
 
 	end
 
-	graph
+	graph.nodedict
 
 end
 
-println(trim_sequence(graph))
+println(traversalsequence!(graph.nodedict))
 =#
 
