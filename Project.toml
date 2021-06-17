@@ -3,6 +3,11 @@ uuid = "c72f0762-cde9-48ab-9c04-b95b1f9f3cc1"
 authors = ["heetbeet heetbeet@users.noreply.github.com and contributors"]
 version = "0.1.1"
 
+[deps]
+DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
+ReTest = "e0db7c4e-2690-44b9-bad6-7687da720f89"
+GenSymx = "42c20007-70e8-4cce-a2fb-8372ba5faa41"
+
 [compat]
 julia = "1"
 
