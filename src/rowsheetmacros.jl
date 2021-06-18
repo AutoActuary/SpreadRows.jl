@@ -1,35 +1,35 @@
-@testset "@rowsheet" begin
+@testset "@sheet" begin
     T = collect(1:100)
 
-    @rowsheet t ∈ T A[t] = t 
+    @sheet t ∈ T A[t] = t 
     @test A == collect(1:100)
     
-    @rowsheet x ∈ T[end:-1:1] B[x] = x
+    @sheet x ∈ T[end:-1:1] B[x] = x
     @test B == collect(100:-1:1)
 
-    @rowsheet t ∈ T begin D[t] = t + T[t] end
+    @sheet t ∈ T begin D[t] = t + T[t] end
     @test D == collect(1:100)*2
 
-    @test (@rowsheet t ∈ T begin
+    @test (@sheet t ∈ T begin
                 a = 999
                 C[t] = ( t==1  ? 51 : C[t-1]+1 )
            end) == collect(51:50+100)
 
     q = 10
-    @rowsheet t ∈ T D[t] = B[t] + 7 + q
+    @sheet t ∈ T D[t] = B[t] + 7 + q
     @test D == @.(B + 7 + q)
 
-    @rowsheet t ∈ T begin sum_assured_t0 = 
+    @sheet t ∈ T begin sum_assured_t0 = 
         10000
     end
     @test sum_assured_t0 == 10000
 
-    @rowsheet t ∈ T  H[t] = t==1 ? 1 : A[t-1] + B[t]
+    @sheet t ∈ T  H[t] = t==1 ? 1 : A[t-1] + B[t]
     @test H == [t==1 ? 1 : A[t-1] + B[t] for t ∈ T]
 
-    @test_throws CalculationSequenceError @rowsheet t ∈ 1:10 a[t] = a[t]
+    @test_throws CalculationSequenceError @sheet t ∈ 1:10 a[t] = a[t]
 
-    @rowsheet t ∈ 1:600  begin
+    @sheet t ∈ 1:600  begin
         age_t0 = 30
         duration_t0 = 6
         premium_t0 = 100
@@ -51,7 +51,7 @@
     end
 end
 
-rowsheet_expr(sheetformulas::SheetFormulas; with_inits=false) = begin
+sheet_expr(sheetformulas::SheetFormulas; with_inits=false) = begin
     x = sheetformulas.loopdef[1]
     X′ = gensymx("X")
 
@@ -79,32 +79,32 @@ rowsheet_expr(sheetformulas::SheetFormulas; with_inits=false) = begin
     return expr
 end
 
-macro rowsheet(exprloop::Expr, exprbody)
+macro sheet(exprloop::Expr, exprbody)
     sheetformulas = SheetFormulas(exprloop, exprbody; source=__source__)
-    esc(rowsheet_expr(sheetformulas))
+    esc(sheet_expr(sheetformulas))
 end
 
 
-@testset "@rowsheetfn" begin
-    f = @rowsheetfn hello(i ∈ loop)->begin
+@testset "@sheetfn" begin
+    f = @sheetfn hello(i ∈ loop)->begin
         a[i] = i^2
     end
     f(1:100)
 
-    f = @rowsheetfn (a, b, i ∈ loop)->begin
+    f = @sheetfn (a, b, i ∈ loop)->begin
         c[i] = 5^i + b
     end
     f(1, 2, 1:10)
 
-    @rowsheetfn test₁(a, b; i∈loop=1:10)->begin
+    @sheetfn test₁(a, b; i∈loop=1:10)->begin
         c[i] = 5^i + b
     end
     test₁(1, 2; loop=1:10)
 end
 
-rowsheetfn_expr(funcsplit::Dict, sheetformulas::SheetFormulas) = begin
+sheetfn_expr(funcsplit::Dict, sheetformulas::SheetFormulas) = begin
     funcsplit′ = deepcopy(funcsplit)
-     expr = rowsheet_expr(sheetformulas)
+     expr = sheet_expr(sheetformulas)
     
      push!(expr.args, 
            Expr(:tuple, 
@@ -115,24 +115,24 @@ rowsheetfn_expr(funcsplit::Dict, sheetformulas::SheetFormulas) = begin
     return combinedef(funcsplit′)
 end
 
-macro rowsheetfn(exprbody::Expr)
+macro sheetfn(exprbody::Expr)
     funcsplit = splitdef(exprbody)
     exprloop = extract_loopdef_and_adjust_args_and_kwargs!(funcsplit)
     sheetformulas = SheetFormulas(exprloop, funcsplit[:body]; source=__source__)
 
-    return esc(rowsheetfn_expr(funcsplit, sheetformulas))
+    return esc(sheetfn_expr(funcsplit, sheetformulas))
 end
 
 
-@testset "@rowsheetfnkw" begin
+@testset "@sheetfnkw" begin
 
-    @rowsheetfnkw test₂(a, b, x∈X)->begin
+    @sheetfnkw test₂(a, b, x∈X)->begin
          c[x] = 20
     end
 
     test₂(1, 2, 1:100; c=10)
 
-    @rowsheetfnkw test₃(;t∈T = 1:600)->begin
+    @sheetfnkw test₃(;t∈T = 1:600)->begin
         age_t0 = 30
         duration_t0 = 6
         premium_t0 = 100
@@ -159,7 +159,7 @@ end
 
 end
 
-rowsheetfnkw_expr(funcsplit::Dict, sheetformulas::SheetFormulas) = begin
+sheetfnkw_expr(funcsplit::Dict, sheetformulas::SheetFormulas) = begin
     funcsplit′ = deepcopy(funcsplit)
     args = [splitarg(i)[1] for i in [funcsplit′[:args]; funcsplit′[:kwargs]]]
 
@@ -173,7 +173,7 @@ rowsheetfnkw_expr(funcsplit::Dict, sheetformulas::SheetFormulas) = begin
         push!(funcsplit′[:kwargs], Expr(:kw, arg, nothing))
     end
 
-    expr = rowsheet_expr(sheetformulas; with_inits=true)
+    expr = sheet_expr(sheetformulas; with_inits=true)
 
     push!(expr.args, 
     Expr(:tuple, 
@@ -183,9 +183,9 @@ rowsheetfnkw_expr(funcsplit::Dict, sheetformulas::SheetFormulas) = begin
     return esc(combinedef(funcsplit′))
 end
 
-macro rowsheetfnkw(exprbody::Expr)
+macro sheetfnkw(exprbody::Expr)
     funcsplit = splitdef(exprbody)
     exprloop = extract_loopdef_and_adjust_args_and_kwargs!(funcsplit)
     sheetformulas = SheetFormulas(exprloop, funcsplit[:body]; source=__source__)
-    rowsheetfnkw_expr(funcsplit, sheetformulas)
+    sheetfnkw_expr(funcsplit, sheetformulas)
 end
