@@ -1,5 +1,7 @@
 module RowSheets
-    export @rowsheet
+    export @sheet
+    export @sheetfn
+    export @sheetfnkw
 
     using ReTest
     using DataStructures: OrderedDict, OrderedSet
