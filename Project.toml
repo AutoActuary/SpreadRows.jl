@@ -5,7 +5,9 @@ version = "0.1.1"
 
 [deps]
 DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
+MacroTools = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
 ReTest = "e0db7c4e-2690-44b9-bad6-7687da720f89"
+SHA = "ea8e919c-243c-51af-8825-aaa63cd721ce"
 GenSymx = "42c20007-70e8-4cce-a2fb-8372ba5faa41"
 
 [compat]

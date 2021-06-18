@@ -5,6 +5,29 @@ struct FormulaPoint
 end
 
 
+mutable struct SheetFormulas
+    loopdef::Pair{Symbol, Any}
+    formulas::OrderedDict{Symbol, FormulaPoint}
+    graph::DiGraph{Symbol}
+    ordered_clusters::Vector{Vector{Symbol}}
+    __source__::Union{LineNumberNode, Nothing}
+end
+
+
+SheetFormulas(exprloop::Expr,
+              exprbody::Expr;
+              source::Union{LineNumberNode, Nothing}=nothing) = begin
+
+    loopdef = expr_to_loop_definition(exprloop)
+    x, _ = loopdef
+    formulas = expr_to_formulas(exprbody, x; line=source)
+    graph = formulas_to_digraph(formulas)
+    ordered_clusters = generate_calculation_sequence(graph; preferred_sequence=keys(formulas))
+
+    SheetFormulas(loopdef, formulas, graph, ordered_clusters, source)
+end
+
+
 struct CalculationSequenceError <: Exception
     var::String
 end
@@ -27,11 +50,11 @@ end
 "
 Function to make testing between macros easier
 "
-function striplines(ex)
+striplines(ex) = begin
     ex′ = Expr(:block, deepcopy(ex))
 
     # Define the mutation
-    function recurse(ex)
+    recurse(ex) = begin
         if ex isa Expr
             for i ∈ 1:length(ex.args)
                 if ex.args[i] isa LineNumberNode
@@ -71,7 +94,7 @@ end
 "
 Get all the variable names from an expression, this excludes macro names and function names
 "
-function get_vars(ex)
+get_vars(ex) = begin
     varnames = Array{Symbol, 1}()
 
     # behaviour for each type
@@ -93,7 +116,7 @@ end
 "
 Assign a value to a variable within an expression
 "
-function replace_var(ex, var::Symbol, value)
+replace_var(ex, var::Symbol, value) = begin
     ex′ = Expr(:block, deepcopy(ex))
 
     # behaviour for each type
@@ -129,7 +152,7 @@ end
 "
 Find references involving `t` in an equation. Note: nested referencing is currently not supported.
 "
-function get_indexing(ex, x::Symbol)::Vector{Pair{Symbol, Any}}
+get_indexing(ex, x::Symbol)::Vector{Pair{Symbol, Any}} = begin
     references = Vector()
 
     recurse(ex) = nothing
@@ -174,7 +197,7 @@ Test if expression contains an linear combination of x.
     if x is non-linear: false
     if not explicit: nothing
 "
-function expr_is_linear(ex, x::Symbol)
+expr_is_linear(ex, x::Symbol) = begin
 
     # Can we skip the investigation?
     vars = get_vars(ex)
@@ -224,7 +247,7 @@ end
 "
 Collect all variables in an expression that isn't indexed by `t`
 "
-function get_nonindexed_vars(ex, x::Symbol)
+get_nonindexed_vars(ex, x::Symbol) = begin
     vars = Set()
     ex′ = Expr(:begin, ex)
 
@@ -244,6 +267,64 @@ function get_nonindexed_vars(ex, x::Symbol)
 
     recurse(ex′)
     return vars
+end
+
+
+@testset "formulas_to_digraph" begin
+    dict = expr_to_formulas(quote
+        A[t] = (t == 1 ? 1 : A[t - 1]- C[t]) - D[t]
+        B[t] = t == 1 ? 1 : A[t - 1]
+        C[t] = ((B[t] * E[t]) / 12) * (1 - 0.5*F[t])
+        D[t] = B[t] * F[t] * (1 - 0.5*E)
+        Z = 1
+    end, :t)
+
+    graph = formulas_to_digraph(dict)
+
+    # Test forwards and backwards
+    edges₁ = Set()
+    edges₂ = Set()
+    for (var, links) ∈ graph.nodedict
+        for varᵢₙ ∈ links.in 
+            push!(edges₁, varᵢₙ => var)
+        end
+        for varₒ ∈ links.out 
+            push!(edges₂, var => varₒ)
+        end
+    end
+
+    @test edges₁ == Set([:A=>:A, :C=>:A, :D=>:A, :A=>:B, :B=>:C, :B=>:D])
+    @test edges₂ == edges₁ 
+end
+
+"
+Convert a formula dictionary into a directed graph describing the flow
+of all the variables.
+"
+formulas_to_digraph(formulas::OrderedDict{Symbol, FormulaPoint})::DiGraph{Symbol} = begin
+    # Convert the dictionary into a sequence
+    symbol_links = Dict(key => Vector{Symbol}() for key ∈ keys(formulas))
+    for (varⱼ, formulapoint) ∈ formulas
+        ex = formulapoint.expr
+        for varᵢ ∈ get_vars(ex)
+            haskey(formulas, varᵢ) && push!(symbol_links[varᵢ], varⱼ)
+        end
+    end
+    RowSheets.DiGraph(symbol_links)
+end
+
+
+"
+Calculate the possible calculation sequence of a graph
+"
+generate_calculation_sequence(graph::DiGraph; preferred_sequence=nothing) = begin
+    sequence = RowSheets.traversalsequence(graph)
+    if preferred_sequence !== nothing
+        sequence_bias = OrderedDict(var=>i for (i,var) ∈ enumerate(preferred_sequence))
+        sequence = [sort(clus, by=x->(sequence_bias[x])) for clus in sequence]
+    end
+
+    return sequence
 end
 
 
@@ -313,3 +394,82 @@ last(d::OrderedDict) = begin
         i == length(d) && return item
     end
 end
+
+"
+Subsample an OrderedDict
+"
+subsample(d::OrderedDict, keys) = begin
+    OrderedDict(i=>d[i] for i ∈ keys)
+end
+
+
+expr_to_loop_definition(expr::Expr) = begin
+    if !(expr.head == :call && length(expr.args) == 3 && 
+        expr.args[1] ∈ (:in, :∈) && expr.args[2] isa Symbol)
+
+        throw(ErrorException("Expected loop definition like `t ∈ T`, got `$expr`"))
+    else 
+        expr.args[2] => expr.args[3]
+    end
+end
+
+
+"
+This will generate a scrabled `unique` key from 
+a given string, but it will be the same name always.
+"
+symgenx_reproduce(varname) = begin
+    str = [i for i ∈ "₀₁₂₃₄₅₆₇₈₉ₐₑₒₓₔ"]
+    choice = [str[(i%length(str))+1] for i ∈ sha1(varname)[1:8]]
+    return Symbol(join(choice[1:3]) * string(varname) * join(choice[4:end]))
+end
+
+
+"
+Generate a symbol to represent the variablename used
+for testing if a variable is nothing. This is a convenience
+method for always generating a unique reproducable symbol
+for a given input string.
+"
+initsym(var) = begin
+    symgenx_reproduce(string(var) * "_init")
+end
+
+
+"
+Find within all kwargs of a function definition dict for a
+definition :(x ∈ X) or :(x in X)
+"
+extract_loopdef_and_adjust_args_and_kwargs!(funcdict::Dict) = begin
+    is_a_in(expr) = (expr isa Expr && 
+                     expr.head == :call && 
+                     length(expr.args) == 3 && 
+                     expr.args[1] ∈ (:in, :∈))
+
+    extract!(expr) = nothing
+    extract!(expr::Expr) = begin
+        if expr.head == :kw && is_a_in(expr.args[1])
+            inexpr = deepcopy(expr.args[1])
+            lhs = expr.args[1].args[2]
+            expr.args[1] = expr.args[1].args[3]
+            return expr, inexpr
+        elseif is_a_in(expr)
+            inexpr = expr
+            expr = expr.args[3]
+            return expr, inexpr
+        end
+    end
+
+    for key ∈ (:args, :kwargs)
+        for (i, val) ∈ enumerate(funcdict[key])
+            #println(Meta.show_sexpr(val))
+            if (ret = extract!(val)) !== nothing
+                expr, inexpr = ret
+                funcdict[key][i] = expr
+                return inexpr
+            end
+        end
+    end
+
+    return nothing
+end 

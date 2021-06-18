@@ -4,10 +4,11 @@ module RowSheets
     using ReTest
     using DataStructures: OrderedDict, OrderedSet
     using GenSymx
+    using SHA: sha1
+    using MacroTools: splitdef, combinedef, splitarg
 
     include("graphtraversal.jl")
-    include("utils.jl")
-    include("builders.jl")
-    include("sheetformulas.jl")
-    
+    include("formulautils.jl")
+    include("formulaclusters.jl")
+    include("rowsheetmacros.jl")
 end
