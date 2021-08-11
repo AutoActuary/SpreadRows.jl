@@ -22,8 +22,15 @@ mutable struct SheetConfig
 end
 
 
-#struct __PROTECTVERSION__ end
-#SheetConfig(__PROTECTVERSION__, args...; source::Union{LineNumberNode, Nothing}=nothing)
+struct __PROTECTVERSION__ end
+SheetConfig(__PROTECTVERSION__, expr; source=nothing) = begin
+    MacroTools.splitdef(expr)
+    
+end
+SheetConfig(__PROTECTVERSION__, expr1, expr2; source=nothing) = begin
+
+end
+
 
 SheetConfig(exprloop::Expr,
             exprbody::Expr;
