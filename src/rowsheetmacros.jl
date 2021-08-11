@@ -51,28 +51,28 @@
     end
 end
 
-sheet_expr(sheetformulas::SheetFormulas; with_inits=false) = begin
-    x = sheetformulas.loopdef[1]
+sheet_expr(sheetconfig::SheetConfig; with_inits=false) = begin
+    x = sheetconfig.loopdef[1]
     X′ = gensymx("X")
 
     expr = quote end
-    push!(expr.args, sheetformulas.__source__)
-    push!(expr.args, :($X′ = $(sheetformulas.loopdef[2])))
+    push!(expr.args, sheetconfig.__source__)
+    push!(expr.args, :($X′ = $(sheetconfig.loopdef[2])))
 
     if with_inits
-        for var ∈ keys(sheetformulas.formulas)
+        for var ∈ keys(sheetconfig.formulas)
             push!(expr.args, :($(initsym(var)) = $var === nothing))
         end
     end
 
-    for cluster ∈ sheetformulas.ordered_clusters
+    for cluster ∈ sheetconfig.ordered_clusters
         push!(
             expr.args,
             formula_cluster_to_expr(
-                subsample(sheetformulas.formulas, cluster), x, X′; with_inits))
+                subsample(sheetconfig.formulas, cluster), x, X′; with_inits))
     end
 
-    (lastvar, lastformula) = last(sheetformulas.formulas)
+    (lastvar, lastformula) = last(sheetconfig.formulas)
     push!(expr.args, lastformula.line)
     push!(expr.args, lastvar)
 
@@ -80,8 +80,8 @@ sheet_expr(sheetformulas::SheetFormulas; with_inits=false) = begin
 end
 
 macro sheet(exprloop::Expr, exprbody)
-    sheetformulas = SheetFormulas(exprloop, exprbody; source=__source__)
-    esc(sheet_expr(sheetformulas))
+    sheetconfig = SheetConfig(exprloop, exprbody; source=__source__)
+    esc(sheet_expr(sheetconfig))
 end
 
 
@@ -102,13 +102,13 @@ end
     test₁(1, 2; loop=1:10)
 end
 
-sheetfn_expr(funcsplit::Dict, sheetformulas::SheetFormulas) = begin
+sheetfn_expr(funcsplit::Dict, sheetconfig::SheetConfig) = begin
     funcsplit′ = deepcopy(funcsplit)
-     expr = sheet_expr(sheetformulas)
+     expr = sheet_expr(sheetconfig)
     
      push!(expr.args, 
            Expr(:tuple, 
-                [Expr(:(=), var, var) for var in keys(sheetformulas.formulas)]...))
+                [Expr(:(=), var, var) for var in keys(sheetconfig.formulas)]...))
 
     funcsplit′[:body] = expr
 
@@ -118,9 +118,9 @@ end
 macro sheetfn(exprbody::Expr)
     funcsplit = splitdef(exprbody)
     exprloop = extract_loopdef_and_adjust_args_and_kwargs!(funcsplit)
-    sheetformulas = SheetFormulas(exprloop, funcsplit[:body]; source=__source__)
+    sheetconfig = SheetConfig(exprloop, funcsplit[:body]; source=__source__)
 
-    return esc(sheetfn_expr(funcsplit, sheetformulas))
+    return esc(sheetfn_expr(funcsplit, sheetconfig))
 end
 
 
@@ -159,25 +159,25 @@ end
 
 end
 
-sheetfnkw_expr(funcsplit::Dict, sheetformulas::SheetFormulas) = begin
+sheetfnkw_expr(funcsplit::Dict, sheetconfig::SheetConfig) = begin
     funcsplit′ = deepcopy(funcsplit)
     args = [splitarg(i)[1] for i in [funcsplit′[:args]; funcsplit′[:kwargs]]]
 
     for arg in args
-        if haskey(sheetformulas.formulas, arg)
+        if haskey(sheetconfig.formulas, arg)
             throw(ErrorException("Keyword `$arg` both defined in function body and in function header."))
         end
     end
 
-    for arg ∈ keys(sheetformulas.formulas)
+    for arg ∈ keys(sheetconfig.formulas)
         push!(funcsplit′[:kwargs], Expr(:kw, arg, nothing))
     end
 
-    expr = sheet_expr(sheetformulas; with_inits=true)
+    expr = sheet_expr(sheetconfig; with_inits=true)
 
     push!(expr.args, 
     Expr(:tuple, 
-         [Expr(:(=), var, var) for var in keys(sheetformulas.formulas)]...))
+         [Expr(:(=), var, var) for var in keys(sheetconfig.formulas)]...))
 
     funcsplit′[:body] = expr
     return esc(combinedef(funcsplit′))
@@ -186,6 +186,6 @@ end
 macro sheetfnkw(exprbody::Expr)
     funcsplit = splitdef(exprbody)
     exprloop = extract_loopdef_and_adjust_args_and_kwargs!(funcsplit)
-    sheetformulas = SheetFormulas(exprloop, funcsplit[:body]; source=__source__)
-    sheetfnkw_expr(funcsplit, sheetformulas)
+    sheetconfig = SheetConfig(exprloop, funcsplit[:body]; source=__source__)
+    sheetfnkw_expr(funcsplit, sheetconfig)
 end

@@ -5,7 +5,7 @@ struct FormulaPoint
 end
 
 
-mutable struct SheetFormulas
+mutable struct SheetConfig
     loopdef::Pair{Symbol, Any}
     formulas::OrderedDict{Symbol, FormulaPoint}
     graph::DiGraph{Symbol}
@@ -14,7 +14,7 @@ mutable struct SheetFormulas
 end
 
 
-SheetFormulas(exprloop::Expr,
+SheetConfig(exprloop::Expr,
               exprbody::Expr;
               source::Union{LineNumberNode, Nothing}=nothing) = begin
 
@@ -24,7 +24,7 @@ SheetFormulas(exprloop::Expr,
     graph = formulas_to_digraph(formulas)
     ordered_clusters = generate_calculation_sequence(graph; preferred_sequence=keys(formulas))
 
-    SheetFormulas(loopdef, formulas, graph, ordered_clusters, source)
+    SheetConfig(loopdef, formulas, graph, ordered_clusters, source)
 end
 
 
@@ -35,11 +35,11 @@ CalculationSequenceError() = begin
     errmessage = join(split(
         """
         The `@T` macro was unable to order the given formula(s) in a way that 
-        resulted in a correct calculation flow. Note that `@T` cannot take 
-        indexing into account with (1) a mix of forwards `A[t+1]` and backwards 
-        `A[t-1]` referencing, (2) with runtime variables like `A[c+t]`, (3) with 
-        nonlinear t indexing like `A[t^2-3t]`, and (4) with non-t indexing 
-        like A[34].
+        resulted in a correct calculation flow using the current heuristics. 
+        Note that `@T` cannot yet take indexing into account with (a) a mix 
+        of forwards `A[t+1]` and backwards `A[t-1]` referencing, (b) with 
+        runtime variables like the `c` in `A[c+t]`, (c) with nonlinear t 
+        indexing like `A[t^2-3t]`, and (d) with non-t indexing like A[34].
         """, "\n"
     ))
 
@@ -150,7 +150,7 @@ end
     )
 end
 "
-Find references involving `t` in an equation. Note: nested referencing is currently not supported.
+Find references involving x in an equation. Note: nested referencing is currently not supported.
 "
 get_indexing(ex, x::Symbol)::Vector{Pair{Symbol, Any}} = begin
     references = Vector()

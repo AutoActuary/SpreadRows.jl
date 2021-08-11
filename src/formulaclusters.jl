@@ -31,7 +31,7 @@ function formula_cluster_topology(formulas::OrderedDict, x::Symbol)
     for (key, value) ∈ formulas
         for var ∈ get_nonindexed_vars(value, x) 
             if haskey(formulas, var)
-                throw(CalculationSequenceError("Cannot reference full vector while it is part of a cycle: $var"))
+                throw(CalculationSequenceError("Cannot reference full vector while it is part of a cycle: expected `$(var)[$x] = ...`, got `$var = ...`"))
             end
         end
 
