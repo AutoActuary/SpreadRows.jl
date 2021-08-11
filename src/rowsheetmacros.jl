@@ -56,7 +56,7 @@ sheet_expr(sheetconfig::SheetConfig; with_inits=false) = begin
     X′ = gensymx("X")
 
     expr = quote end
-    push!(expr.args, sheetconfig.__source__)
+    push!(expr.args, sheetconfig.source)
     push!(expr.args, :($X′ = $(sheetconfig.loopdef[2])))
 
     if with_inits

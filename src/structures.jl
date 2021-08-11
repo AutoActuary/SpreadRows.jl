@@ -1,3 +1,9 @@
+struct SheetIterator
+    inner::Symbol
+    outer::Symbol
+    iterator
+end
+
 struct SheetFormula
     expr
     broadcast::Bool
@@ -6,13 +12,18 @@ end
 
 
 mutable struct SheetConfig
+    iterator::Union{SheetIterator, Nothing}
+    funcdef::Union{Dict, Nothing}
     loopdef::Pair{Symbol, Any}
     formulas::OrderedDict{Symbol, SheetFormula}
     graph::DiGraph{Symbol}
     ordered_clusters::Vector{Vector{Symbol}}
-    __source__::Union{LineNumberNode, Nothing}
+    source::Union{LineNumberNode, Nothing}
 end
 
+
+#struct __PROTECTVERSION__ end
+#SheetConfig(__PROTECTVERSION__, args...; source::Union{LineNumberNode, Nothing}=nothing)
 
 SheetConfig(exprloop::Expr,
             exprbody::Expr;
@@ -24,7 +35,7 @@ SheetConfig(exprloop::Expr,
     graph = formulas_to_digraph(formulas)
     ordered_clusters = generate_calculation_sequence(graph; preferred_sequence=keys(formulas))
 
-    SheetConfig(loopdef, formulas, graph, ordered_clusters, source)
+    SheetConfig(nothing, nothing, loopdef, formulas, graph, ordered_clusters, source)
 end
 
 
