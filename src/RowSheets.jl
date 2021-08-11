@@ -10,6 +10,7 @@ module RowSheets
     using MacroTools: splitdef, combinedef, splitarg
 
     include("graphtraversal.jl")
+    include("structures.jl")
     include("formulautils.jl")
     include("formulaclusters.jl")
     include("rowsheetmacros.jl")

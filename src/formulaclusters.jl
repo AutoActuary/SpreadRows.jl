@@ -107,7 +107,7 @@ into a coherent forloop `:(for t ∈ T A[t] = B[t]; B[t] = t==1 ? 1 : A[t-1] end
 
 This can be used in each traversal step when traversing the full formuale dependency graph.
 "
-function formula_cluster_to_expr(formulas::OrderedDict{Symbol, FormulaPoint}, x::Symbol, X::Symbol; with_inits=false)
+function formula_cluster_to_expr(formulas::OrderedDict{Symbol, SheetFormula}, x::Symbol, X::Symbol; with_inits=false)
     initwrap(var, expr) = begin
         if with_inits 
             Expr(:if, initsym(var), expr)
@@ -118,28 +118,28 @@ function formula_cluster_to_expr(formulas::OrderedDict{Symbol, FormulaPoint}, x:
 
     # Single definition might have some good shortcuts
     ret = if length(formulas) == 1
-        (var, formulapoint) = first(formulas)
-        e = formulapoint.expr
+        (var, sheetformula) = first(formulas)
+        e = sheetformula.expr
 
         # No broadcast, normal equality
-        if !formulapoint.broadcast
+        if !sheetformula.broadcast
             initwrap(
                 var,
-                Expr(:block, formulapoint.line, Expr(:(=), var, e)),
+                Expr(:block, sheetformula.line, Expr(:(=), var, e)),
             )
 
         # Broadcast via list comprehension
         elseif !has_var(e, var)
             initwrap(
                 var,
-                Expr(:block, formulapoint.line, Expr(:(=), var, Expr(:comprehension, Expr(:generator, e, Expr(:(=), x, X))))),
+                Expr(:block, sheetformula.line, Expr(:(=), var, Expr(:comprehension, Expr(:generator, e, Expr(:(=), x, X))))),
             )
         end
     end
 
     if ret === nothing
-        for (var, formulapoint) ∈ formulas
-            if !formulapoint.broadcast
+        for (var, sheetformula) ∈ formulas
+            if !sheetformula.broadcast
                 throw(CalculationSequenceError("Cannot define full vector while it is part of a cycle: expected `$(var)[$x] = ...`, got `$var = ...`"))
             end
         end

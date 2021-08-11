@@ -1,52 +1,3 @@
-struct FormulaPoint
-    expr
-    broadcast::Bool
-    line::Union{LineNumberNode, Nothing}
-end
-
-
-mutable struct SheetConfig
-    loopdef::Pair{Symbol, Any}
-    formulas::OrderedDict{Symbol, FormulaPoint}
-    graph::DiGraph{Symbol}
-    ordered_clusters::Vector{Vector{Symbol}}
-    __source__::Union{LineNumberNode, Nothing}
-end
-
-
-SheetConfig(exprloop::Expr,
-              exprbody::Expr;
-              source::Union{LineNumberNode, Nothing}=nothing) = begin
-
-    loopdef = expr_to_loop_definition(exprloop)
-    x, _ = loopdef
-    formulas = expr_to_formulas(exprbody, x; line=source)
-    graph = formulas_to_digraph(formulas)
-    ordered_clusters = generate_calculation_sequence(graph; preferred_sequence=keys(formulas))
-
-    SheetConfig(loopdef, formulas, graph, ordered_clusters, source)
-end
-
-
-struct CalculationSequenceError <: Exception
-    var::String
-end
-CalculationSequenceError() = begin
-    errmessage = join(split(
-        """
-        The `@T` macro was unable to order the given formula(s) in a way that 
-        resulted in a correct calculation flow using the current heuristics. 
-        Note that `@T` cannot yet take indexing into account with (a) a mix 
-        of forwards `A[t+1]` and backwards `A[t-1]` referencing, (b) with 
-        runtime variables like the `c` in `A[c+t]`, (c) with nonlinear t 
-        indexing like `A[t^2-3t]`, and (d) with non-t indexing like A[34].
-        """, "\n"
-    ))
-
-    CalculationSequenceError(errmessage)
-end
-
-
 "
 Function to make testing between macros easier
 "
@@ -301,11 +252,11 @@ end
 Convert a formula dictionary into a directed graph describing the flow
 of all the variables.
 "
-formulas_to_digraph(formulas::OrderedDict{Symbol, FormulaPoint})::DiGraph{Symbol} = begin
+formulas_to_digraph(formulas::OrderedDict{Symbol, SheetFormula})::DiGraph{Symbol} = begin
     # Convert the dictionary into a sequence
     symbol_links = Dict(key => Vector{Symbol}() for key ∈ keys(formulas))
-    for (varⱼ, formulapoint) ∈ formulas
-        ex = formulapoint.expr
+    for (varⱼ, sheetformula) ∈ formulas
+        ex = sheetformula.expr
         for varᵢ ∈ get_vars(ex)
             haskey(formulas, varᵢ) && push!(symbol_links[varᵢ], varⱼ)
         end
@@ -340,10 +291,10 @@ end
 
     @test [x.line isa LineNumberNode  for (_, x) ∈ dict] == [true, true, true]
     
-    @test [FormulaPoint(x.expr, x.broadcast, nothing) for (_, x) ∈ dict] == [
-        FormulaPoint(:(1), false, nothing)
-        FormulaPoint(:(cat), true, nothing)
-        FormulaPoint(:(hello), false, nothing)
+    @test [SheetFormula(x.expr, x.broadcast, nothing) for (_, x) ∈ dict] == [
+        SheetFormula(:(1), false, nothing)
+        SheetFormula(:(cat), true, nothing)
+        SheetFormula(:(hello), false, nothing)
         ]
 end
 
@@ -354,7 +305,7 @@ expr_to_formulas(expr, x::Symbol; line::Union{Nothing, LineNumberNode}=nothing) 
     end
 
     # Collect all definitions into dict (e.g. Dict(:A=>:(B+C), :B=>:(C+D))
-    formulas = OrderedDict{Symbol, FormulaPoint}()
+    formulas = OrderedDict{Symbol, SheetFormula}()
     lastline = line
     for e ∈ expr.args
         if e isa LineNumberNode || e === nothing
@@ -378,7 +329,7 @@ expr_to_formulas(expr, x::Symbol; line::Union{Nothing, LineNumberNode}=nothing) 
             throw(ErrorException("Formula definition for $(var) may only occur once."))
         end
 
-        formulas[var] = FormulaPoint(e.args[2], bcast, lastline)
+        formulas[var] = SheetFormula(e.args[2], bcast, lastline)
         lastline = line
     end
 
