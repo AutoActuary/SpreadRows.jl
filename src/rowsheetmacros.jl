@@ -1,35 +1,35 @@
 @testset "@sheet" begin
     T = collect(1:100)
 
-    @sheet t ∈ T A[t] = t 
+    @sheet_ t ∈ T A[t] = t 
     @test A == collect(1:100)
     
-    @sheet x ∈ T[end:-1:1] B[x] = x
+    @sheet_ x ∈ T[end:-1:1] B[x] = x
     @test B == collect(100:-1:1)
 
-    @sheet t ∈ T begin D[t] = t + T[t] end
+    @sheet_ t ∈ T begin D[t] = t + T[t] end
     @test D == collect(1:100)*2
 
-    @test (@sheet t ∈ T begin
+    @test (@sheet_ t ∈ T begin
                 a = 999
                 C[t] = ( t==1  ? 51 : C[t-1]+1 )
            end) == collect(51:50+100)
 
     q = 10
-    @sheet t ∈ T D[t] = B[t] + 7 + q
+    @sheet_ t ∈ T D[t] = B[t] + 7 + q
     @test D == @.(B + 7 + q)
 
-    @sheet t ∈ T begin sum_assured_t0 = 
+    @sheet_ t ∈ T begin sum_assured_t0 = 
         10000
     end
     @test sum_assured_t0 == 10000
 
-    @sheet t ∈ T  H[t] = t==1 ? 1 : A[t-1] + B[t]
+    @sheet_ t ∈ T  H[t] = t==1 ? 1 : A[t-1] + B[t]
     @test H == [t==1 ? 1 : A[t-1] + B[t] for t ∈ T]
 
-    @test_throws CalculationSequenceError @sheet t ∈ 1:10 a[t] = a[t]
+    @test_throws CalculationSequenceError @sheet_ t ∈ 1:10 a[t] = a[t]
 
-    @sheet t ∈ 1:600  begin
+    @sheet_ t ∈ 1:600  begin
         age_t0 = 30
         duration_t0 = 6
         premium_t0 = 100
@@ -86,7 +86,7 @@ end
 
 
 @testset "@sheetfn" begin
-    f = @sheetfn hello(i ∈ loop)->begin
+    f = @sheet_ (i ∈ loop)->begin
         a[i] = i^2
     end
     f(1:100)
@@ -96,7 +96,7 @@ end
     end
     f(1, 2, 1:10)
 
-    @sheetfn test₁(a, b; i∈loop=1:10)->begin
+    @sheetfn test₁(a, b; i∈loop=1:10) = begin
         c[i] = 5^i + b
     end
     test₁(1, 2; loop=1:10)
@@ -112,11 +112,11 @@ sheetfn_expr(funcsplit::Dict, sheetconfig::SheetConfig) = begin
 
     funcsplit′[:body] = expr
 
-    return combinedef(funcsplit′)
+    return ExprTools.combinedef(funcsplit′)
 end
 
 macro sheetfn(exprbody::Expr)
-    funcsplit = splitdef(exprbody)
+    funcsplit = ExprTools.splitdef(exprbody)
     exprloop = extract_loopdef_and_adjust_args_and_kwargs!(funcsplit)
     sheetconfig = SheetConfig(exprloop, funcsplit[:body]; source=__source__)
 
@@ -126,13 +126,12 @@ end
 
 @testset "@sheetfnkw" begin
 
-    @sheetfnkw test₂(a, b, x∈X)->begin
+    @sheet_ test₂(a, b, x∈X; __) = begin
          c[x] = 20
     end
+    @test test₂(1, 2, 1:100; c=10).c == 10
 
-    test₂(1, 2, 1:100; c=10)
-
-    @sheetfnkw test₃(;t∈T = 1:600)->begin
+    @sheet_ test₃(;t∈T = 1:600, __) = begin
         age_t0 = 30
         duration_t0 = 6
         premium_t0 = 100
@@ -154,14 +153,13 @@ end
     end
 
     @test test₃().age_t0 == 30
-    [test₃(;T=(1:600),
-            premium_t0=10+x/10).liability[30] for x ∈ 50:10:500]
+    [test₃(;T=(1:600), premium_t0=10+x/10).liability[30] for x ∈ 50:10:500]
 
 end
 
 sheetfnkw_expr(funcsplit::Dict, sheetconfig::SheetConfig) = begin
     funcsplit′ = deepcopy(funcsplit)
-    args = [splitarg(i)[1] for i in [funcsplit′[:args]; funcsplit′[:kwargs]]]
+    args = [MacroTools.splitarg(i)[1] for i in [funcsplit′[:args]; funcsplit′[:kwargs]]]
 
     for arg in args
         if haskey(sheetconfig.formulas, arg)
@@ -180,12 +178,96 @@ sheetfnkw_expr(funcsplit::Dict, sheetconfig::SheetConfig) = begin
          [Expr(:(=), var, var) for var in keys(sheetconfig.formulas)]...))
 
     funcsplit′[:body] = expr
-    return esc(combinedef(funcsplit′))
+    return esc(ExprTools.combinedef(funcsplit′))
 end
 
-macro sheetfnkw(exprbody::Expr)
-    funcsplit = splitdef(exprbody)
-    exprloop = extract_loopdef_and_adjust_args_and_kwargs!(funcsplit)
-    sheetconfig = SheetConfig(exprloop, funcsplit[:body]; source=__source__)
-    sheetfnkw_expr(funcsplit, sheetconfig)
+macro sheet_(expr::Expr)
+    sheetconfig_to_expr(SheetConfig(nothing, expr; source=__source__))
 end
+
+macro sheet_(expriter::Expr, exprbody::Expr)
+    sheetconfig_to_expr(SheetConfig(nothing, expriter, exprbody; source=__source__))
+end
+
+sheetconfig_to_expr(sheetconfig::SheetConfig) = begin
+    
+    # Iterator Symbols
+    x = sheetconfig.iterator.inner
+    X = sheetconfig.iterator.outer
+    if X === nothing 
+        X = gensymx(x) 
+    end
+    itr = sheetconfig.iterator.iterator
+
+    # Don't mutate function definition
+    funcdef = deepcopy(sheetconfig.funcdef)
+    # if you want to pass keyword arguments to overwrite variable in the body
+    
+    with_inits = false
+    if funcdef !== nothing 
+        for (i, kwarg) ∈ enumerate(get(funcdef, :kwargs, []))
+            if kwarg == :__
+                with_inits = true
+                deleteat!(funcdef[:kwargs], i)
+                break
+            end
+        end
+    end
+
+    with_argiter = false
+    if funcdef !== nothing
+        for arg_kwarg ∈ (get(funcdef, :args, []),
+                         get(funcdef, :kwargs, [])) # Will this allow mutation?
+            for (i, arg) ∈ enumerate(arg_kwarg)
+                if arg == :_
+                    with_argiter = true
+                    arg_kwarg[i] = itr === nothing ? X : Expr(:kw, X, itr)
+                end
+            end
+        end
+    end
+
+    expr = quote end
+    push!(expr.args, sheetconfig.source)
+    if !with_argiter
+        push!(expr.args, :($X = $(itr)))
+    end
+
+    if with_inits
+        # Inject keyword arguments to the function header
+        if !haskey(funcdef, :kwargs)
+            funcdef[:kwargs] = []
+        end
+        for arg ∈ keys(sheetconfig.formulas)
+            push!(funcdef[:kwargs], Expr(:kw, arg, nothing))
+        end
+
+        # Inject/wrap formula definitions in a `if x === nothing x[i] = ... end`
+        # to allow keyword arguments to overwrite their definitions
+        for var ∈ keys(sheetconfig.formulas)
+            push!(expr.args, :($(initsym(var)) = $var === nothing))
+        end
+    end
+
+    # Populate all the formula code
+    for cluster ∈ sheetconfig.ordered_clusters
+        push!(
+            expr.args,
+            formula_cluster_to_expr(
+                subsample(sheetconfig.formulas, cluster), x, X; with_inits))
+    end
+
+    (lastvar, _) = last(sheetconfig.formulas)
+    push!(expr.args, lastvar)
+
+    if funcdef !== nothing
+        push!(expr.args, 
+            Expr(:tuple, [Expr(:(=), var, var) for var in keys(sheetconfig.formulas)]...))
+
+        funcdef[:body] = expr
+        return esc(ExprTools.combinedef(funcdef))
+    else
+        return esc(expr)
+    end
+end
+

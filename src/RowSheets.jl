@@ -1,4 +1,5 @@
 module RowSheets
+    using Base: inner_mapslices!
     export @sheet
     export @sheetfn
     export @sheetfnkw
@@ -7,7 +8,7 @@ module RowSheets
     using DataStructures: OrderedDict, OrderedSet
     using GenSymx
     using SHA: sha1
-    using MacroTools: splitdef, combinedef, splitarg
+    import IterTools
 
     include("graphtraversal.jl")
     include("structures.jl")
