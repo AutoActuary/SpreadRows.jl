@@ -19,13 +19,8 @@ What the `@spread` macro in the above example does is:
 
 The `@spread` macro can take two or one expression blocks, the first can be used for establishing the iteration definition (like `i ∈ I = 1:N`), the main block can be used to define the formulae of the model. Depending on how the `@spread` macro is used, the model can either export a function, evaluated the sequence in place:
 ```
-         ┌── `Symbol` Referring to a range-like iterator, e.g.: `I`
-         │
-         ├── `Expr` To create a range-like iterator. This can be attached to a name,
-         │   like `I=1:100` or be kept anonymous, like `1:100`
-         │
-         ├── `Expr` using `∈` to attach an inner-loop `Symbol` to the above two, 
-         │    cases, like `i ∈ I` or `i ∈ I = 1:100`
+         ┌── `Expr` To create a range-like iterator. This can be attached to a name
+         │   (like `I` in `i ∈ I = 1:10`) or be kept anonymous (like `i ∈ 1:10`)
          │   
 @spread [1] [2]
              │   
@@ -34,7 +29,7 @@ The `@spread` macro can take two or one expression blocks, the first can be used
              │   For example, given the desired formulae:
              │     x[i] = i
              │     y[i] = x[i]^2
-             │   If we run `@spread 1:10=>i begin x[i] = i; y[i] = x[i]^2 end`, the
+             │   If we run `@spread i∈1:10 begin x[i] = i; y[i] = x[i]^2 end`, the
              │   surrounding scope will gain the following two variables
              │     x = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
              │     y = [1, 4, 9, 16, 25, 36, 49, 64, 81, 100]
@@ -43,9 +38,9 @@ The `@spread` macro can take two or one expression blocks, the first can be used
                  evaluate its body and return a NamedTuple with formulae result.
                  Placeholder `_` is optional and can be used as a positional or 
                  keyword argument to allow iterators alternative to [1] to be 
-                 passed to the function.
-                 Placeholder `__` is optional and can be passed as a keyword 
-                 argument to allow overwriting variables within the function body.
+                 injected as an arg or a kwarg.
+                 Placeholder `__` is an optional keyword argument definition to
+                 allow overwriting variables within the function body.
                  For example:
                    @spread i∈1:100 f(a, b, _; __) = begin
                        x[i] = i + a
@@ -55,6 +50,11 @@ The `@spread` macro can take two or one expression blocks, the first can be used
                  with parameters
                    x = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
                    y = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+                   
+                 But calling `f` like `f(1, 2, 1:10; y=9)` will overwrite the `y` 
+                 definition and return the `NamedTuple` parameters as
+                   x = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+                   y = 9
 ```
 
 ```
