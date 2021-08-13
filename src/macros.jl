@@ -1,35 +1,35 @@
-@testset "@sheet" begin
+@testset "@spread" begin
     T = collect(1:100)
 
-    @sheet t ∈ T A[t] = t 
+    @spread t ∈ T A[t] = t 
     @test A == collect(1:100)
     
-    @sheet x ∈ T[end:-1:1] B[x] = x
+    @spread x ∈ T[end:-1:1] B[x] = x
     @test B == collect(100:-1:1)
 
-    @sheet t ∈ T begin D[t] = t + T[t] end
+    @spread t ∈ T begin D[t] = t + T[t] end
     @test D == collect(1:100)*2
 
-    @test (@sheet t ∈ T begin
+    @test (@spread t ∈ T begin
                 a = 999
                 C[t] = ( t==1  ? 51 : C[t-1]+1 )
            end) == collect(51:50+100)
 
     q = 10
-    @sheet t ∈ T D[t] = B[t] + 7 + q
+    @spread t ∈ T D[t] = B[t] + 7 + q
     @test D == @.(B + 7 + q)
 
-    @sheet t ∈ T begin sum_assured_t0 = 
+    @spread t ∈ T begin sum_assured_t0 = 
         10000
     end
     @test sum_assured_t0 == 10000
 
-    @sheet t ∈ T  H[t] = t==1 ? 1 : A[t-1] + B[t]
+    @spread t ∈ T  H[t] = t==1 ? 1 : A[t-1] + B[t]
     @test H == [t==1 ? 1 : A[t-1] + B[t] for t ∈ T]
 
-    @test_throws CalculationSequenceError @sheet t ∈ 1:10 a[t] = a[t]
+    @test_throws CalculationSequenceError @spread t ∈ 1:10 a[t] = a[t]
 
-    @sheet t ∈ T = 1:600  begin
+    @spread t ∈ T = 1:600  begin
         age_t0 = 30
         duration_t0 = 6
         premium_t0 = 100
@@ -50,28 +50,28 @@
         liability[t] = -profit_discounted[t] + if t<length(T) liability[t+1] else 0 end
     end
 
-    f = @sheet (i ∈ loop)->begin
+    f = @spread (i ∈ loop)->begin
         a[i] = i^2
     end
     f(1:100)
 
-    f = @sheet (a, b, i ∈ loop)->begin
+    f = @spread (a, b, i ∈ loop)->begin
         c[i] = 5^i + b
     end
     f(1, 2, 1:10)
 
-    @sheet test₁(a, b; i∈loop=1:10) = begin
+    @spread test₁(a, b; i∈loop=1:10) = begin
         c[i] = 5^i + b
     end
     test₁(1, 2; loop=1:10)
 
 
-    @sheet test₂(a, b, x∈X; __) = begin
+    @spread test₂(a, b, x∈X; __) = begin
          c[x] = 20
     end
     @test test₂(1, 2, 1:100; c=10).c == 10
 
-    @sheet test₃(;t∈T = 1:600, __) = begin
+    @spread test₃(;t∈T = 1:600, __) = begin
         age_t0 = 30
         duration_t0 = 6
         premium_t0 = 100
@@ -98,27 +98,27 @@
 end
 
 
-macro sheet(expr::Expr)
-    sheetconfig_to_expr(SheetConfig(expr; source=__source__))
+macro spread(expr::Expr)
+    spreadconfig_to_expr(SpreadConfig(expr; source=__source__))
 end
 
 
-macro sheet(expriter::Expr, exprbody::Expr)
-    sheetconfig_to_expr(SheetConfig(expriter, exprbody; source=__source__))
+macro spread(expriter::Expr, exprbody::Expr)
+    spreadconfig_to_expr(SpreadConfig(expriter, exprbody; source=__source__))
 end
 
 
-sheetconfig_to_expr(sheetconfig::SheetConfig) = begin
+spreadconfig_to_expr(spreadconfig::SpreadConfig) = begin
     # Iterator Symbols
-    x = sheetconfig.iterator.inner
-    X = sheetconfig.iterator.outer
+    x = spreadconfig.iterator.inner
+    X = spreadconfig.iterator.outer
     if X === nothing 
         X = gensymx(x) 
     end
-    itr = sheetconfig.iterator.iterator
+    itr = spreadconfig.iterator.iterator
 
     # Don't mutate function definition
-    funcdef = deepcopy(sheetconfig.funcdef)
+    funcdef = deepcopy(spreadconfig.funcdef)
 
     # if you want to pass keyword arguments to overwrite variable in the body
     with_inits = false
@@ -147,7 +147,7 @@ sheetconfig_to_expr(sheetconfig::SheetConfig) = begin
     end
 
     expr = quote end
-    push!(expr.args, sheetconfig.source)
+    push!(expr.args, spreadconfig.source)
     if !with_argiter
         push!(expr.args, :($X = $(itr)))
     end
@@ -157,31 +157,31 @@ sheetconfig_to_expr(sheetconfig::SheetConfig) = begin
         if !haskey(funcdef, :kwargs)
             funcdef[:kwargs] = []
         end
-        for arg ∈ keys(sheetconfig.formulas)
+        for arg ∈ keys(spreadconfig.formulas)
             push!(funcdef[:kwargs], Expr(:kw, arg, nothing))
         end
 
         # A variable indicating if a keyword overwrite is empty
-        for var ∈ keys(sheetconfig.formulas)
+        for var ∈ keys(spreadconfig.formulas)
             push!(expr.args, :($(reproducable_init_symbol(var)) = $var === nothing))
         end
     end
 
     # Populate all the formula code
-    for cluster ∈ sheetconfig.ordered_clusters
+    for cluster ∈ spreadconfig.ordered_clusters
         push!(
             expr.args,
             formula_cluster_to_expr(
-                subsample(sheetconfig.formulas, cluster), x, X; with_inits))
+                subsample(spreadconfig.formulas, cluster), x, X; with_inits))
     end
 
-    (lastvar, _) = last(sheetconfig.formulas)
+    (lastvar, _) = last(spreadconfig.formulas)
     push!(expr.args, lastvar)
 
     # If we have a function, return the inner variables as named tuples
     if funcdef !== nothing
         push!(expr.args, 
-            Expr(:tuple, [Expr(:(=), var, var) for var in keys(sheetconfig.formulas)]...))
+            Expr(:tuple, [Expr(:(=), var, var) for var in keys(spreadconfig.formulas)]...))
 
         funcdef[:body] = expr
         return esc(ExprTools.combinedef(funcdef))

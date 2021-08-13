@@ -1,5 +1,5 @@
-module RowSheets
-    export @sheet
+module SpreadRows
+    export @spread
 
     using ReTest
     using DataStructures: OrderedDict, OrderedSet
@@ -9,8 +9,8 @@ module RowSheets
     import MacroTools
 
     include("graphtraversal.jl")
-    include("rowsheetstructures.jl")
+    include("structs.jl")
     include("formulautils.jl")
     include("formulaclusters.jl")
-    include("rowsheetmacros.jl")
+    include("macros.jl")
 end

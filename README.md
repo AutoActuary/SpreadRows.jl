@@ -1,11 +1,11 @@
-# RowSheets.jl
+# SpreadRows.jl
 
 Coming soon...
 
 I want to make a Julia package that is a bit more generic than AutoryBroadcastMacros, and then rather let this be a dependency for the specific behaviour in AutoryBroadcastMacros. I specifically want something like this:
 
 ```julia
-@sheet i ∈ 1:N begin
+@spread i ∈ 1:N begin
   a[i] = b[i] + c[i] + d
   b = [x for x in 1:N]
   c[i] = b[i]^2
@@ -13,7 +13,7 @@ I want to make a Julia package that is a bit more generic than AutoryBroadcastMa
 end
 ```
 
-What the above code does is it automatically define two vectors `a` and `c` that can be indexed with the sheet indexer `i`. Because `a` and `c` are defined as `a[1]` and `c[i]`, we see them as row-spreaded over `i`. On the other hand `b` and `d` are plainly defined like `b = ...` and are not seen as spreaded and will be evaluated as `b = [x for x in 1:N]` and `d=9`.
+What the above code does is it automatically define two vectors `a` and `c` that can be indexed with the spread indexer `i`. Because `a` and `c` are defined as `a[1]` and `c[i]`, we see them as row-spreaded over `i`. On the other hand `b` and `d` are plainly defined like `b = ...` and are not seen as spreaded and will be evaluated as `b = [x for x in 1:N]` and `d=9`.
 
 
 TODO: the following section is added first as documentation, then as implementation, so currently this is out of sync with the test of the package

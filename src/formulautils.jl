@@ -252,16 +252,16 @@ end
 Convert a formula dictionary into a directed graph describing the flow
 of all the variables.
 "
-formulas_to_digraph(formulas::OrderedDict{Symbol, SheetFormula})::DiGraph{Symbol} = begin
+formulas_to_digraph(formulas::OrderedDict{Symbol, SpreadFormula})::DiGraph{Symbol} = begin
     # Convert the dictionary into a sequence
     symbol_links = Dict(key => Vector{Symbol}() for key ∈ keys(formulas))
-    for (varⱼ, sheetformula) ∈ formulas
-        ex = sheetformula.expr
+    for (varⱼ, spreadformula) ∈ formulas
+        ex = spreadformula.expr
         for varᵢ ∈ get_vars(ex)
             haskey(formulas, varᵢ) && push!(symbol_links[varᵢ], varⱼ)
         end
     end
-    RowSheets.DiGraph(symbol_links)
+    SpreadRows.DiGraph(symbol_links)
 end
 
 
@@ -269,7 +269,7 @@ end
 Calculate the possible calculation sequence of a graph
 "
 generate_calculation_sequence(graph::DiGraph; preferred_sequence=nothing) = begin
-    sequence = RowSheets.traversalsequence(graph)
+    sequence = SpreadRows.traversalsequence(graph)
     if preferred_sequence !== nothing
         sequence_bias = OrderedDict(var=>i for (i,var) ∈ enumerate(preferred_sequence))
         sequence = [sort(clus, by=x->(sequence_bias[x])) for clus in sequence]
@@ -291,10 +291,10 @@ end
 
     @test [x.line isa LineNumberNode  for (_, x) ∈ dict] == [true, true, true]
     
-    @test [SheetFormula(x.expr, x.broadcast, nothing) for (_, x) ∈ dict] == [
-        SheetFormula(:(1), false, nothing)
-        SheetFormula(:(cat), true, nothing)
-        SheetFormula(:(hello), false, nothing)
+    @test [SpreadFormula(x.expr, x.broadcast, nothing) for (_, x) ∈ dict] == [
+        SpreadFormula(:(1), false, nothing)
+        SpreadFormula(:(cat), true, nothing)
+        SpreadFormula(:(hello), false, nothing)
         ]
 end
 
@@ -305,7 +305,7 @@ expr_to_formulas(expr, x::Symbol; line::Union{Nothing, LineNumberNode}=nothing) 
     end
 
     # Collect all definitions into dict (e.g. Dict(:A=>:(B+C), :B=>:(C+D))
-    formulas = OrderedDict{Symbol, SheetFormula}()
+    formulas = OrderedDict{Symbol, SpreadFormula}()
     lastline = line
     for e ∈ expr.args
         if e isa LineNumberNode || e === nothing
@@ -329,7 +329,7 @@ expr_to_formulas(expr, x::Symbol; line::Union{Nothing, LineNumberNode}=nothing) 
             throw(ErrorException("Formula definition for $(var) may only occur once."))
         end
 
-        formulas[var] = SheetFormula(e.args[2], bcast, lastline)
+        formulas[var] = SpreadFormula(e.args[2], bcast, lastline)
         lastline = line
     end
 
