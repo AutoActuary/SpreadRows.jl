@@ -1,17 +1,16 @@
-module RowSheets
-    export @sheet
-    export @sheetfn
-    export @sheetfnkw
+module SpreadRows
+    export @spread
 
     using ReTest
     using DataStructures: OrderedDict, OrderedSet
     using GenSymx
     using SHA: sha1
-    using MacroTools: splitdef, combinedef, splitarg
+    import ExprTools
+    import MacroTools
 
     include("graphtraversal.jl")
-    include("structures.jl")
+    include("structs.jl")
     include("formulautils.jl")
     include("formulaclusters.jl")
-    include("rowsheetmacros.jl")
+    include("macros.jl")
 end

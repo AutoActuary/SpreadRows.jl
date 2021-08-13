@@ -17,10 +17,34 @@
 end
 
 
+struct CalculationSequenceError <: Exception
+    var::String
+end
+CalculationSequenceError() = begin
+    errmessage = join(split(
+        """
+        The `@spread` macro was unable to order the given formulae in a way that resulted in a 
+        correct calculation flow at runtime (using its sequence heuristics). 
+        Note that `@spread` cannot trace referenced effectively yet in the case of (assume 
+        iteration definition of `i∈I = 1:10`):
+          1. mixing forwards `+1` and backwards `-1` references (like `A[i+1] + A[i-1]`),
+          2. using runtime variables in references (like `c` in `A[i+c]`),
+          3. nonlinear indexing (like `A[i^2-3i]`),
+          4. indexing without inner Symbol (like `A[34]` where no `i` of found).
+        """, "\n"
+    ))
+    CalculationSequenceError(errmessage)
+end
+
+
 "
 For a given cluster of formulae, derive the order in which these formulae
-should be computed within `for x ∈ T` and return this order along with
-how t is referenced: [-1, 0, +1, nothing]
+should be computed within `for i ∈ I` and return this order along with
+how `i` is referenced: 
+    backwards: -1
+    no-offset: 0
+    forwards: +1
+    unknown: nothing
 "
 function formula_cluster_topology(formulas::OrderedDict, x::Symbol)
     refs_dict = Dict{Symbol, Any}()
@@ -93,11 +117,14 @@ end
     dict = expr_to_formulas(quote
         A[t] = (t == 1 ? 1 : A[t - 1]- C[t]) - D[t]
         B[t] = t == 1 ? 1 : A[t - 1]
-        C[t] = ((B[t] * E[t]) / 12) * (1 - 0.5*F[t])
-        D[t] = B[t] * F[t] * (1 - 0.5*E)
+        C[t] = (B[t]/12) * (1 - 0.5*B[t])
+        D[t] = B[t] * 0.5
     end, :t)
 
-    formula_cluster_to_expr(dict, :t, :T);
+    @test collect(keys(dict)) == [:A, :B, :C, :D]
+    @test eval(Expr(:block, :(T = 1:10), 
+                            formula_cluster_to_expr(dict, :t, :T),
+                            :B)) isa Vector;
     
 end
 
@@ -107,10 +134,10 @@ into a coherent forloop `:(for t ∈ T A[t] = B[t]; B[t] = t==1 ? 1 : A[t-1] end
 
 This can be used in each traversal step when traversing the full formuale dependency graph.
 "
-function formula_cluster_to_expr(formulas::OrderedDict{Symbol, SheetFormula}, x::Symbol, X::Symbol; with_inits=false)
+function formula_cluster_to_expr(formulas::OrderedDict{Symbol, SpreadFormula}, x::Symbol, X::Symbol; with_inits=false)
     initwrap(var, expr) = begin
         if with_inits 
-            Expr(:if, initsym(var), expr)
+            Expr(:if, reproducable_init_symbol(var), expr)
         else 
             expr 
         end
@@ -118,28 +145,28 @@ function formula_cluster_to_expr(formulas::OrderedDict{Symbol, SheetFormula}, x:
 
     # Single definition might have some good shortcuts
     ret = if length(formulas) == 1
-        (var, sheetformula) = first(formulas)
-        e = sheetformula.expr
+        (var, spreadformula) = first(formulas)
+        e = spreadformula.expr
 
         # No broadcast, normal equality
-        if !sheetformula.broadcast
+        if !spreadformula.broadcast
             initwrap(
                 var,
-                Expr(:block, sheetformula.line, Expr(:(=), var, e)),
+                Expr(:block, spreadformula.line, Expr(:(=), var, e)),
             )
 
         # Broadcast via list comprehension
         elseif !has_var(e, var)
             initwrap(
                 var,
-                Expr(:block, sheetformula.line, Expr(:(=), var, Expr(:comprehension, Expr(:generator, e, Expr(:(=), x, X))))),
+                Expr(:block, spreadformula.line, Expr(:(=), var, Expr(:comprehension, Expr(:generator, e, Expr(:(=), x, X))))),
             )
         end
     end
 
     if ret === nothing
-        for (var, sheetformula) ∈ formulas
-            if !sheetformula.broadcast
+        for (var, spreadformula) ∈ formulas
+            if !spreadformula.broadcast
                 throw(CalculationSequenceError("Cannot define full vector while it is part of a cycle: expected `$(var)[$x] = ...`, got `$var = ...`"))
             end
         end

@@ -1,2 +1,2 @@
-using RowSheets
-RowSheets.runtests()
+using SpreadRows
+SpreadRows.runtests()
