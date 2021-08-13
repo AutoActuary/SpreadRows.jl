@@ -72,6 +72,4 @@ The `@spread` macro can take two or one expression blocks, the first can be used
 ```
 
 TODO:
- - Move some of the generic AutoryBroadcastMacros functionaility over here
- - Write a manifesto for why a package like this is useful.
- - Explain how complex interactions between formulas work
+ - Show Pluto examples to get exited about
