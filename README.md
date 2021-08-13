@@ -1,33 +1,31 @@
 # SpreadRows.jl
 
-Coming soon...
-
-I want to make a Julia package that is a bit more generic than AutoryBroadcastMacros, and then rather let this be a dependency for the specific behaviour in AutoryBroadcastMacros. I specifically want something like this:
+A package that allows for spreadsheet-like syntax for row-dependent calculations:
 
 ```julia
-@spread i ∈ 1:N begin
+@spread i ∈ I = 1:N begin
   a[i] = b[i] + c[i] + d
-  b = [x for x in 1:N]
+  b = [x for x in I]
   c[i] = b[i]^2
   d = 9
 end
 ```
 
-What the above code does is it automatically define two vectors `a` and `c` that can be indexed with the spread indexer `i`. Because `a` and `c` are defined as `a[1]` and `c[i]`, we see them as row-spreaded over `i`. On the other hand `b` and `d` are plainly defined like `b = ...` and are not seen as spreaded and will be evaluated as `b = [x for x in 1:N]` and `d=9`.
+What the `@spread` macro in the above example does is:
+  - From `i ∈ I = 1:N` defines a _spread_ variable `i` and defines the domain over which to _spread_ as `I = 1:N`
+  - Detects which formulas should be _spreaded_ over `I` (in this case `a[i]=...` and `c[i]=...`)
+  - Detects which formulas should be taken as it is (in this case `b=...` and `d=9`)
+  - Reorder the formulas to allow for a caculation sequence that will first calculate a formula's dependencies
 
-
-TODO: the following section is added first as documentation, then as implementation, so currently this is out of sync with the test of the package
-
-
-The spread macro can take two expression blocks, the first for establishing what to be used as the rows indexes, and another to be used as the formulae of the model. The spread macro will then transform this into a spreadsheet like evaluation.
+The `@spread` macro can take two or one expression blocks, the first can be used for establishing the iteration definition (like `i ∈ I = 1:N`), the main block can be used to define the formulae of the model. Depending on how the `@spread` macro is used, the model can either export a function, evaluated the sequence in place:
 ```
-         ┌── `Symbol` Referring to a range-like iterator, e.g.: `T`
+         ┌── `Symbol` Referring to a range-like iterator, e.g.: `I`
          │
          ├── `Expr` To create a range-like iterator. This can be attached to a name,
-         │   like `T=1:100` or be kept anonymous, like `1:100`
+         │   like `I=1:100` or be kept anonymous, like `1:100`
          │
          ├── `Expr` using `∈` to attach an inner-loop `Symbol` to the above two, 
-         │    cases, like `t ∈ T` or `t ∈ T = 1:100`
+         │    cases, like `i ∈ I` or `i ∈ I = 1:100`
          │   
 @spread [1] [2]
              │   
@@ -49,13 +47,12 @@ The spread macro can take two expression blocks, the first for establishing what
                  Placeholder `__` is optional and can be passed as a keyword 
                  argument to allow overwriting variables within the function body.
                  For example:
-                   @spread t∈1:100 f(a, b, _; __) = begin
+                   @spread i∈1:100 f(a, b, _; __) = begin
                        x[i] = i + a
                        y[i] = x[i] + b
                    end
-                   f(1, 2, 1:10)
-
-                 Will return a `NamedTuple{(:x, :y)}` instance where
+                 Calling `f` like `f(1, 2, 1:10)` returns a `NamedTuple{(:x, :y)}`,
+                 with parameters
                    x = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
                    y = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
 
@@ -66,7 +63,7 @@ The spread macro can take two expression blocks, the first for establishing what
              by an `Expr` with `∈`. This requires the iterator definition to be
              explicitely stated as a function argument.
              For example:
-               @spread f(a, b, t∈1:100) = begin
+               @spread f(a, b, i∈1:100) = begin
                    x[i] = i + a
                    y[i] = x[i] + b
                end
