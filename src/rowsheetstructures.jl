@@ -2,9 +2,9 @@ import ExprTools
 using DocStringExtensions
 
 @testset "SheetConfig" begin
-    @test SheetConfig(nothing, :(x ∈ X = 1:10), :(begin p[x] = 5 end)) !== nothing
-    @test SheetConfig(nothing, :(x ∈ X = 1:10), :(function(_) end)) !== nothing
-    @test SheetConfig(nothing, :(function(x in X=1:10,)end)) !== nothing
+    @test SheetConfig(:(x ∈ X = 1:10), :(begin p[x] = 5 end)) !== nothing
+    @test SheetConfig(:(x ∈ X = 1:10), :(function(_) end)) !== nothing
+    @test SheetConfig(:(function(x in X=1:10,)end)) !== nothing
 end
 
 
@@ -99,22 +99,43 @@ struct SheetFormula
 end
 
 
+"""
+A structure to hold the neccesary configurations required by the `@sheet` macro.
+Read the `@sheet` documentation to understand how the macro operates. For example,
+given the instance `@sheet i∈I=1:10 f(a, b, _) = begin x[i] = a; y[i] = b end`, 
+the following struct will be created as part of the parsing process:
+
+$(FIELDS)
+"""
 mutable struct SheetConfig
+    "A SheetIterator object capturing the iteration definition (e.g. `i∈I=1:10`)"
     iterator::Union{SheetIterator, Nothing}
+
+    "A function definition constructed from ExprTools.splitdef"
     funcdef::Union{Dict, Nothing}
-    loopdef::Pair{Symbol, Any}
-    formulas::OrderedDict{Symbol, SheetFormula}
-    graph::DiGraph{Symbol}
-    ordered_clusters::Vector{Vector{Symbol}}
+
+    "The body of the function or code block (e.g. `begin x[i] = a; y[i] = b end`)"
+    exprbody #Expr
+
+    "A transformation of `exprbody` to `SheetFormula` objects"
+    formulas::Union{OrderedDict{Symbol, SheetFormula}, Nothing}
+
+    "A `DiGraph` describing the relationships between the `formulas`"
+    graph::Union{DiGraph{Symbol}, Nothing}
+
+    "A clustering and ordering of `SheetFormula`"
+    ordered_clusters::Union{Vector{Vector{Symbol}}, Nothing}
+
+    "The original `LineNumberNode` of where `@sheet` is called from"
     source::Union{LineNumberNode, Nothing}
 end
 
 
 # Sheet config
-SheetConfig(__protect__::Nothing, exprbody; source=nothing) = begin
-    SheetConfig(__protect__, nothing, exprbody; source=nothing)
+SheetConfig(exprbody, construct::Bool=true; source=nothing) = begin
+    SheetConfig(nothing, exprbody, construct; source)
 end
-SheetConfig(__protect__::Nothing, expriter, exprbody; source=nothing) = begin
+SheetConfig(expriter, exprbody, construct::Bool=true; source=nothing) = begin
 
     # Get the function header definition
     funcdef = try
@@ -181,13 +202,25 @@ SheetConfig(__protect__::Nothing, expriter, exprbody; source=nothing) = begin
         )
     end
 
+    sheetconfig = SheetConfig(iterator, funcdef, exprbody, nothing, nothing, nothing, source)
+    if construct
+        construct_formula_sequence!(sheetconfig)
+    end
+
+    return sheetconfig
+end
+
+
+construct_formula_sequence!(sheetconfig::SheetConfig) = begin
     # Transform body into fomulas list
-    formulas = expr_to_formulas(exprbody, iterator.inner; line=source)
+    formulas = expr_to_formulas(sheetconfig.exprbody,
+                                sheetconfig.iterator.inner; line=sheetconfig.source)
 
     # Assert no duplicate variable definitions
 
-    if funcdef !== nothing
-        for i in [get(funcdef, :args, []); get(funcdef, :kwargs, [])]
+    if sheetconfig.funcdef !== nothing
+        for i in [get(sheetconfig.funcdef, :args, []);
+                  get(sheetconfig.funcdef, :kwargs, [])]
             arg = MacroTools.splitarg(i)[1]
             if haskey(formulas, arg)
                 throw(ErrorException("Variable `$arg` defined both as a function argument and as a formula"))
@@ -199,39 +232,9 @@ SheetConfig(__protect__::Nothing, expriter, exprbody; source=nothing) = begin
     graph = formulas_to_digraph(formulas)
     ordered_clusters = generate_calculation_sequence(graph; preferred_sequence=keys(formulas))
 
-    SheetConfig(iterator, funcdef, :qqq=>:qqq, formulas, graph, ordered_clusters, source)
+    sheetconfig.formulas = formulas
+    sheetconfig.graph = graph
+    sheetconfig.ordered_clusters = ordered_clusters
+
+    sheetconfig
 end
-
-
-SheetConfig(exprloop::Expr,
-            exprbody::Expr;
-            source::Union{LineNumberNode, Nothing}=nothing) = begin
-
-    loopdef = expr_to_loop_definition(exprloop)
-    x, _ = loopdef
-    formulas = expr_to_formulas(exprbody, x; line=source)
-    graph = formulas_to_digraph(formulas)
-    ordered_clusters = generate_calculation_sequence(graph; preferred_sequence=keys(formulas))
-
-    SheetConfig(nothing, nothing, loopdef, formulas, graph, ordered_clusters, source)
-end
-
-
-struct CalculationSequenceError <: Exception
-    var::String
-end
-CalculationSequenceError() = begin
-    errmessage = join(split(
-        """
-        The `@T` macro was unable to order the given formula(s) in a way that 
-        resulted in a correct calculation flow using the current heuristics. 
-        Note that `@T` cannot yet take indexing into account with (a) a mix 
-        of forwards `A[t+1]` and backwards `A[t-1]` referencing, (b) with 
-        runtime variables like the `c` in `A[c+t]`, (c) with nonlinear t 
-        indexing like `A[t^2-3t]`, and (d) with non-t indexing like A[34].
-        """, "\n"
-    ))
-
-    CalculationSequenceError(errmessage)
-end
-

@@ -43,7 +43,7 @@ has_var(ex, s::Symbol) = false
 end
 
 "
-Get all the variable names from an expression, this excludes macro names and function names
+Get all the variable names from an expression, excluding macro names and function names
 "
 get_vars(ex) = begin
     varnames = Array{Symbol, 1}()
@@ -65,7 +65,7 @@ end
 
 
 "
-Assign a value to a variable within an expression
+Replace a variable within an expression with anything
 "
 replace_var(ex, var::Symbol, value) = begin
     ex′ = Expr(:block, deepcopy(ex))
@@ -101,7 +101,7 @@ end
     )
 end
 "
-Find references involving x in an equation. Note: nested referencing is currently not supported.
+Find references involving `x` in an equation. Note: nested referencing is currently not supported.
 "
 get_indexing(ex, x::Symbol)::Vector{Pair{Symbol, Any}} = begin
     references = Vector()
@@ -143,10 +143,10 @@ end
 end
 
 "
-Test if expression contains an linear combination of x.
-    if x is linear: true
-    if x is non-linear: false
-    if not explicit: nothing
+Test if expression contains an linear combination of `x`.
+    if linear w.r.t. `x`: true
+    if non-linear w.r.g. `x`: false
+    if heuristic cannot evaluate: nothing
 "
 expr_is_linear(ex, x::Symbol) = begin
 
@@ -196,7 +196,7 @@ end
 end
 
 "
-Collect all variables in an expression that isn't indexed by `t`
+Collect all variables in an expression that isn't indexed by `x`
 "
 get_nonindexed_vars(ex, x::Symbol) = begin
     vars = Set()
@@ -314,7 +314,7 @@ expr_to_formulas(expr, x::Symbol; line::Union{Nothing, LineNumberNode}=nothing) 
         end
 
         if !(expr isa Expr) || (e.head != :(=))
-            throw(ErrorException("Only assignment expressions are valid, like `A = 5` and `A[i] = 5`, got: $(e)"))
+            throw(ErrorException("Only assignment expressions are valid, like `A = 5` and `A[$x] = 5`, got: $(e)"))
         end
 
         var, bcast =  if e.args[1] isa Symbol
@@ -322,7 +322,7 @@ expr_to_formulas(expr, x::Symbol; line::Union{Nothing, LineNumberNode}=nothing) 
         elseif e.args[1].head == :ref && e.args[1].args[1] isa Symbol && e.args[1].args[2:end] == [x]
             e.args[1].args[1], true
         else
-            throw(ErrorException("Only assignment expressions are valid, like `A = 5` and `A[i] = 5`, got: $(e)"))
+            throw(ErrorException("Only assignment expressions are valid, like `A = 5` and `A[$x] = 5`, got: $(e)"))
         end
 
         if haskey(formulas, var)
@@ -354,20 +354,9 @@ subsample(d::OrderedDict, keys) = begin
 end
 
 
-expr_to_loop_definition(expr::Expr) = begin
-    if !(expr.head == :call && length(expr.args) == 3 && 
-        expr.args[1] ∈ (:in, :∈) && expr.args[2] isa Symbol)
-
-        throw(ErrorException("Expected loop definition like `t ∈ T`, got `$expr`"))
-    else 
-        expr.args[2] => expr.args[3]
-    end
-end
-
-
 "
-This will generate a scrabled `unique` key from 
-a given string, but it will be the same name always.
+This will transform `varname` into a scrabled new symgenx version.
+Same input will have same output.
 "
 symgenx_reproduce(varname) = begin
     str = [i for i ∈ "₀₁₂₃₄₅₆₇₈₉ₐₑₒₓₔ"]
@@ -377,50 +366,8 @@ end
 
 
 "
-Generate a symbol to represent the variablename used
-for testing if a variable is nothing. This is a convenience
-method for always generating a unique reproducable symbol
-for a given input string.
+Convenience method for generating same unique reproducable symbol.
 "
-initsym(var) = begin
+reproducable_init_symbol(var) = begin
     symgenx_reproduce(string(var) * "_init")
 end
-
-
-"
-Find within all kwargs of a function definition dict for a
-definition :(x ∈ X) or :(x in X)
-"
-extract_loopdef_and_adjust_args_and_kwargs!(funcdict::Dict) = begin
-    is_a_in(expr) = (expr isa Expr && 
-                     expr.head == :call && 
-                     length(expr.args) == 3 && 
-                     expr.args[1] ∈ (:in, :∈))
-
-    extract!(expr) = nothing
-    extract!(expr::Expr) = begin
-        if expr.head == :kw && is_a_in(expr.args[1])
-            inexpr = deepcopy(expr.args[1])
-            lhs = expr.args[1].args[2]
-            expr.args[1] = expr.args[1].args[3]
-            return expr, inexpr
-        elseif is_a_in(expr)
-            inexpr = expr
-            expr = expr.args[3]
-            return expr, inexpr
-        end
-    end
-
-    for key ∈ (:args, :kwargs)
-        for (i, val) ∈ enumerate(funcdict[key])
-            #println(Meta.show_sexpr(val))
-            if (ret = extract!(val)) !== nothing
-                expr, inexpr = ret
-                funcdict[key][i] = expr
-                return inexpr
-            end
-        end
-    end
-
-    return nothing
-end 

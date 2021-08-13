@@ -17,10 +17,34 @@
 end
 
 
+struct CalculationSequenceError <: Exception
+    var::String
+end
+CalculationSequenceError() = begin
+    errmessage = join(split(
+        """
+        The `@sheet` macro was unable to order the given formulae in a way that resulted in a 
+        correct calculation flow at runtime (using its sequence heuristics). 
+        Note that `@sheet` cannot trace referenced effectively yet in the case of (assume 
+        iteration definition of `i∈I = 1:10`):
+          1. mixing forwards `+1` and backwards `-1` references (like `A[i+1] + A[i-1]`),
+          2. using runtime variables in references (like `c` in `A[i+c]`),
+          3. nonlinear indexing (like `A[i^2-3i]`),
+          4. indexing without inner Symbol (like `A[34]` where no `i` of found).
+        """, "\n"
+    ))
+    CalculationSequenceError(errmessage)
+end
+
+
 "
 For a given cluster of formulae, derive the order in which these formulae
-should be computed within `for x ∈ T` and return this order along with
-how t is referenced: [-1, 0, +1, nothing]
+should be computed within `for i ∈ I` and return this order along with
+how `i` is referenced: 
+    backwards: -1
+    no-offset: 0
+    forwards: +1
+    unknown: nothing
 "
 function formula_cluster_topology(formulas::OrderedDict, x::Symbol)
     refs_dict = Dict{Symbol, Any}()
@@ -110,7 +134,7 @@ This can be used in each traversal step when traversing the full formuale depend
 function formula_cluster_to_expr(formulas::OrderedDict{Symbol, SheetFormula}, x::Symbol, X::Symbol; with_inits=false)
     initwrap(var, expr) = begin
         if with_inits 
-            Expr(:if, initsym(var), expr)
+            Expr(:if, reproducable_init_symbol(var), expr)
         else 
             expr 
         end
