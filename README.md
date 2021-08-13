@@ -55,7 +55,9 @@ The `@spread` macro can take two or one expression blocks, the first can be used
                  with parameters
                    x = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
                    y = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+```
 
+```
 @spread [1]
          │   
          └── `Expr` a function-like expression in the same fashion as [2] in the
