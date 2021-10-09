@@ -146,7 +146,7 @@ spreadconfig_to_expr(spreadconfig::SpreadConfig) = begin
         end
     end
 
-    expr = quote end
+    expr = Expr(:block)
     push!(expr.args, spreadconfig.source)
     if !with_argiter
         push!(expr.args, :($X = $(itr)))
