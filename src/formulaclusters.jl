@@ -196,7 +196,7 @@ function formula_cluster_to_expr(formulas::OrderedDict{Symbol, SpreadFormula}, x
         ret = (quote
             $definitions
             try
-                for t in $loopover
+                for $x in $loopover
                     $assignments
                 end
             catch $e
