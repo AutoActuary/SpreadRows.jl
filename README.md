@@ -3,7 +3,7 @@
 A package that allows for spreadsheet-like syntax for row-dependent calculations:
 
 ```julia
-@spread i ∈ I = 1:N begin
+@spread i ∈ I = 1:100 begin
   a[i] = b[i] + c[i] + d
   b = [x for x in I]
   c[i] = b[i]^2
