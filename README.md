@@ -71,5 +71,8 @@ The `@spread` macro can take two or one expression blocks, the first can be used
                end
 ```
 
-TODO:
- - Show Pluto examples to get exited about
+### Example
+Here is an example of constructing a spreadrow function, running it over seven rows, and collecting the result as a DataFrame:
+
+![image](https://user-images.githubusercontent.com/4103775/136757132-36952373-264b-43c4-912f-cb861c6c21a6.png)
+
