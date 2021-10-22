@@ -361,13 +361,46 @@ Same input will have same output.
 symgenx_reproduce(varname) = begin
     str = [i for i ∈ "₀₁₂₃₄₅₆₇₈₉ₐₑₒₓₔ"]
     choice = [str[(i%length(str))+1] for i ∈ sha1(varname)[1:8]]
-    return Symbol(join(choice[1:3]) * string(varname) * join(choice[4:end]))
+    return Symbol("ₓ" * join(choice[1:3]) * string(varname) * join(choice[4:end]))
 end
 
 
 "
 Convenience method for generating same unique reproducable symbol.
 "
-reproducable_init_symbol(var) = begin
-    symgenx_reproduce(string(var) * "_init")
+reproducable_init_symbol(var) = symgenx_reproduce(string(var) * "_init")
+reproducable_map_symbol(var) = symgenx_reproduce(string(var) * "_map")
+
+boundrycheck_transformer(vars) = begin	
+	x -> begin
+		if x isa Expr && x.head == :ref && x.args[1] ∈ vars
+			var = x.args[1]
+			if length(x.args) != 2
+				throw(error("`$x` should only be one-dimensional indexing"))
+			end
+			
+			@gensymx i
+			ival = SpreadRows.replace_var(
+				SpreadRows.replace_var(
+					x.args[2],
+					:begin,
+					:(firstindex($var))
+				),
+				:end,
+				:(lastindex($var))
+			)
+			err = "Referenced `$x` before initialized."
+
+			Expr(:block, 
+				Expr(:(=), i, ival),
+				Expr(:(||), Expr(:ref, reproducable_map_symbol(var), i),
+							Expr(:call,
+								 :throw,
+								 :($calculation_sequence_error($err)))),
+				Expr(:ref, var, i)
+			)
+		else
+			x
+		end
+	end
 end

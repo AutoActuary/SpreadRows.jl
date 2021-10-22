@@ -14,28 +14,32 @@
         :D => :(B[t] * F[t] * (1 - 0.5*E))
       )
       @test_throws CalculationSequenceError formula_cluster_topology(formulas, :t)
+
+      @test_throws CalculationSequenceError @spread i∈1:10 begin 
+            a[i]=b[i]
+            b[i]=a[i] 
+      end
 end
 
+
+calculationsequenceerrormessage = join(strip.(split(
+    """
+    Note that @spread cannot always ensure the formula ordering at compile time.
+    For example @spread has to guess when 
+    (1.) mixing forwards `+1` and backwards `-1` references
+        (like `A[i+1] + A[i-1]`),
+    (2.) using runtime variables in references (like `c` in `A[i+c]`),
+    (3.) nonlinear indexing (like `A[i^2-3i]`),
+    (4.) absolute indexing (like `A[34]` without any `i`).
+    """, "\n")), " ")
 
 struct CalculationSequenceError <: Exception
     var::String
 end
 CalculationSequenceError() = begin
-    errmessage = join(split(
-        """
-        The `@spread` macro was unable to order the given formulae in a way that resulted in a 
-        correct calculation flow at runtime (using its sequence heuristics). 
-        Note that `@spread` cannot trace referenced effectively yet in the case of (assume 
-        iteration definition of `i∈I = 1:10`):
-          1. mixing forwards `+1` and backwards `-1` references (like `A[i+1] + A[i-1]`),
-          2. using runtime variables in references (like `c` in `A[i+c]`),
-          3. nonlinear indexing (like `A[i^2-3i]`),
-          4. indexing without inner Symbol (like `A[34]` where no `i` of found).
-        """, "\n"
-    ))
-    CalculationSequenceError(errmessage)
+    CalculationSequenceError(calculationsequenceerrormessage)
 end
-
+calculation_sequence_error(additional_error) = CalculationSequenceError("$additional_error $calculationsequenceerrormessage")
 
 "
 For a given cluster of formulae, derive the order in which these formulae
@@ -128,6 +132,8 @@ end
     
 end
 
+
+
 "
 Transform a cluster of formulae/equations that is possibly cyclic `:(B = t==1 ? 1 : A[t-1]; A = B[t])`
 into a coherent forloop `:(for t ∈ T A[t] = B[t]; B[t] = t==1 ? 1 : A[t-1] end)`.
@@ -182,26 +188,27 @@ function formula_cluster_to_expr(formulas::OrderedDict{Symbol, SpreadFormula}, x
                       Expr(:block,
                           formulas[var].line,
                             :($(var) = Vector(undef, length($X))))))
+
+             push!(definitions.args,
+                   :($(reproducable_map_symbol(var)) = BitVector(false for _ ∈ 1:length($X))))
+
         end
 
         loopover =  rtype > 0 ? :(reverse($X)) : X
         
+        f_bounds = boundrycheck_transformer(seq)
         assignments = Expr(:block)
         for var ∈ seq
             push!(assignments.args, formulas[var].line)
-            push!(assignments.args, :($(var)[$x] = $(formulas[var].expr)))
+            push!(assignments.args, :($(var)[$x] = $(MacroTools.postwalk(f_bounds, formulas[var].expr))))
+            push!(assignments.args, :($(reproducable_map_symbol(var))[$x] = true))
         end
         
         @gensymx e
         ret = (quote
             $definitions
-            try
-                for $x in $loopover
-                    $assignments
-                end
-            catch $e
-                $e isa UndefRefError && throw($CalculationSequenceError())
-                rethrow($e)
+            for $x in $loopover
+                $assignments
             end
             nothing
         end)
