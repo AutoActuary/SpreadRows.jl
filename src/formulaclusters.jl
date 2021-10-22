@@ -91,7 +91,7 @@ function formula_cluster_topology(formulas::OrderedDict, x::Symbol)
     sequence = traversalsequence!(DiGraph(edges))
     sequence = [var for cluster in sequence for var in cluster]
 
-    # Put the leftovers in kinda same order than found
+    # Put the leftovers kinda in the same order than found
     not_represented = setdiff!(OrderedSet(keys(formulas)), sequence)
     pre = Vector{Symbol}()
     post = Vector{Symbol}()
