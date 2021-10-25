@@ -8,6 +8,7 @@ module SpreadRows
     import ExprTools
     import MacroTools
 
+    include("formulaunrolling.jl")
     include("graphtraversal.jl")
     include("structs.jl")
     include("formulautils.jl")
