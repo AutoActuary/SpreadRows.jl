@@ -177,41 +177,6 @@ function formula_cluster_to_expr(formulas::OrderedDict{Symbol, SpreadFormula}, x
             end
         end
 
-        # Broadcast via long way around
-        rtype, seq = formula_cluster_topology(OrderedDict(i=>j.expr for (i,j) ∈ formulas), x)
-        
-        definitions = Expr(:block)
-        for var ∈ seq
-            push!(definitions.args,
-                  initwrap(
-                      var,
-                      Expr(:block,
-                          formulas[var].line,
-                            :($(var) = Vector(undef, length($X))))))
-
-             push!(definitions.args,
-                   :($(reproducable_map_symbol(var)) = BitVector(false for _ ∈ 1:length($X))))
-
-        end
-
-        loopover =  rtype > 0 ? :(reverse($X)) : X
-        
-        f_bounds = boundrycheck_transformer(seq)
-        assignments = Expr(:block)
-        for var ∈ seq
-            push!(assignments.args, formulas[var].line)
-            push!(assignments.args, :($(var)[$x] = $(MacroTools.postwalk(f_bounds, formulas[var].expr))))
-            push!(assignments.args, :($(reproducable_map_symbol(var))[$x] = true))
-        end
-        
-        @gensymx e
-        ret = (quote
-            $definitions
-            for $x in $loopover
-                $assignments
-            end
-            nothing
-        end)
     end
     
     return ret
