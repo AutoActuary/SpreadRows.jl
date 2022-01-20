@@ -145,7 +145,7 @@ traversalsequence!(graph::DiGraph{T})  where T = begin
 
 		# merge cluster with other strong clusters
 		for idₘ ∈ setdiff!(ids ∩ keys(strongclusters), [idₙ])
-			push!(strongclusters[idₙ], pop!(strongclusters, idₘ))
+			push!(strongclusters[idₙ], pop!(strongclusters, idₘ)...)
 		end
 
 		return idₙ
