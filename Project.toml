@@ -1,7 +1,7 @@
 name = "SpreadRows"
 uuid = "222f5762-88d9-44cb-96a4-b35f7f3fd7c4"
 authors = ["heetbeet heetbeet@users.noreply.github.com and contributors"]
-version = "0.0.4"
+version = "0.0.6"
 
 [deps]
 DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
