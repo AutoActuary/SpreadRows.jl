@@ -99,12 +99,12 @@ end
 
 
 macro spread(expr::Expr)
-    spreadconfig_to_expr(SpreadConfig(expr; source=__source__))
+    esc(spreadconfig_to_expr(SpreadConfig(expr; source=__source__)))
 end
 
 
 macro spread(expriter::Expr, exprbody::Expr)
-    spreadconfig_to_expr(SpreadConfig(expriter, exprbody; source=__source__))
+    esc(spreadconfig_to_expr(SpreadConfig(expriter, exprbody; source=__source__)))
 end
 
 
@@ -184,10 +184,10 @@ spreadconfig_to_expr(spreadconfig::SpreadConfig) = begin
             Expr(:tuple, [Expr(:(=), var, var) for var in keys(spreadconfig.formulas)]...))
 
         funcdef[:body] = expr
-        return esc(ExprTools.combinedef(funcdef))
+        return ExprTools.combinedef(funcdef)
 
     # Else just throw them in the sourrounding scope
     else
-        return esc(expr)
+        return expr
     end
 end
