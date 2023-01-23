@@ -7,22 +7,20 @@ striplines(ex) = begin
     # Define the mutation
     recurse(ex) = begin
         if ex isa Expr
-            for i ∈ 1:length(ex.args)
+            for i in 1:length(ex.args)
                 if ex.args[i] isa LineNumberNode
                     ex.args[i] = nothing
-                else 
+                else
                     recurse(ex.args[i])
-    
-                end 
-            end 
-        end 
+                end
+            end
+        end
     end
 
     recurse(ex′)
 
     ex = ex′.args[1]
     return ex
-
 end
 
 @testset "has_var" begin
@@ -37,7 +35,6 @@ has_var(ex::Expr, s::Symbol) = any(has_var.(ex.args, s))
 has_var(ex::Symbol, s::Symbol) = ex == s
 has_var(ex, s::Symbol) = false
 
-
 @testset "get_vars" begin
     @test get_vars(:(a = foo(b + c + bar(d) + e[f]))) == [:a, :b, :c, :d, :e, :f]
 end
@@ -45,78 +42,78 @@ end
 "
 Get all the variable names from an expression, excluding macro names and function names
 "
-get_vars(ex) = begin
-    varnames = Array{Symbol, 1}()
+function get_vars(ex)
+    varnames = Array{Symbol,1}()
 
     # behaviour for each type
     recurse(ex) = nothing
     recurse(ex::Symbol) = push!(varnames, ex)
     recurse(ex::Expr) = begin
-        i₁ = ex.head ∈ [:call, :macocall] ? 2 : 1 
-        for i ∈ i₁:length(ex.args)
+        i₁ = ex.head ∈ [:call, :macocall] ? 2 : 1
+        for i in i₁:length(ex.args)
             recurse(ex.args[i])
         end
-    end 
+    end
 
     # Apply and return
-    recurse(ex) 
+    recurse(ex)
     return varnames
 end
-
 
 "
 Replace a variable within an expression with anything
 "
-replace_var(ex, var::Symbol, value) = begin
-    ex′ = Expr(:block, deepcopy(ex))
+function replace_var(ex, var::Symbol, value)
+    begin
+        ex′ = Expr(:block, deepcopy(ex))
 
-    # behaviour for each type
-    recurse(ex) = nothing
-    recurse(ex::Expr) = begin
-        i₁ = ex.head ∈ [:call, :macocall] ? 2 : 1 
-        for i ∈ i₁:length(ex.args)
-            if ex.args[i] == var
-                ex.args[i] = value
-            else
-                recurse(ex.args[i])
+        # behaviour for each type
+        recurse(ex) = nothing
+        recurse(ex::Expr) = begin
+            i₁ = ex.head ∈ [:call, :macocall] ? 2 : 1
+            for i in i₁:length(ex.args)
+                if ex.args[i] == var
+                    ex.args[i] = value
+                else
+                    recurse(ex.args[i])
+                end
             end
         end
-    end 
 
-    # Apply and return
-    recurse(ex′)
-    ex = ex′.args[1]
-    return ex
+        # Apply and return
+        recurse(ex′)
+        ex = ex′.args[1]
+        return ex
+    end
 end
-
 
 @testset "get_indexing" begin
-    @test( 
-        get_indexing(:(a[5] + a[8] + b[t+40]), :t) == 
-        [:b => :(t + 40)]
-    )
+    @test(get_indexing(:(a[5] + a[8] + b[t + 40]), :t) == [:b => :(t + 40)])
     @test(
-        get_indexing(:(a[5] + a[8] + b[t+40] + b[t-30] + c[t]), :t) == 
-        [:b => :(t + 40), :b => :(t - 30), :c => :t]
+        get_indexing(:(a[5] + a[8] + b[t + 40] + b[t - 30] + c[t]), :t) ==
+            [:b => :(t + 40), :b => :(t - 30), :c => :t]
     )
 end
+
 "
 Find references involving `x` in an equation. Note: nested referencing is currently not supported.
 "
-get_indexing(ex, x::Symbol)::Vector{Pair{Symbol, Any}} = begin
+function get_indexing(ex, x::Symbol)::Vector{Pair{Symbol,Any}}
     references = Vector()
 
     recurse(ex) = nothing
-    recurse(ex::Expr) = begin
-        if ex.head == :ref && length(ex.args) == 2 && ex.args[1] isa Symbol
-            (ex₁, ex₂) = ex.args 
+    function recurse(ex::Expr)
+        begin
+            if ex.head == :ref && length(ex.args) == 2 && ex.args[1] isa Symbol
+                (ex₁, ex₂) = ex.args
 
-            if has_var(ex₂, x)
-                push!(references, ex₁=>ex₂)
+                if has_var(ex₂, x)
+                    push!(references, ex₁ => ex₂)
+                end
             end
-        end
-        for i in ex.args
-            recurse(i)
+            for i in ex.args
+                recurse(i)
+            end
         end
     end
 
@@ -124,22 +121,21 @@ get_indexing(ex, x::Symbol)::Vector{Pair{Symbol, Any}} = begin
     return references
 end
 
-
 @testset "expr_is_linear" begin
-    @test expr_is_linear(:(t*t), :t) == false
+    @test expr_is_linear(:(t * t), :t) == false
     @test expr_is_linear(:(t^2), :t) == false
-    @test expr_is_linear(:((5+67)*foo(t)), :t) == false
+    @test expr_is_linear(:((5 + 67) * foo(t)), :t) == false
     @test expr_is_linear(:(t == 0 ? 1 : 2), :t) == false
-    
-    @test expr_is_linear(:(t+1+2/3*5), :t)
-    @test expr_is_linear(:(t*2+1+2/3*5), :t)
-    @test expr_is_linear(:((5+67)*t), :t)
 
-    @test expr_is_linear(:(1+(a+t)), :t) == true
-    @test expr_is_linear(:(1+(a+2t)), :t) == true
-    @test expr_is_linear(:(1+(a+(t*t))), :t) == false    
-    @test expr_is_linear(:(1+(a+(q*q))), :t) === nothing # no t
-    @test expr_is_linear(:(1+(a+(t)+t-t+5)), :t) == false
+    @test expr_is_linear(:(t + 1 + 2 / 3 * 5), :t)
+    @test expr_is_linear(:(t * 2 + 1 + 2 / 3 * 5), :t)
+    @test expr_is_linear(:((5 + 67) * t), :t)
+
+    @test expr_is_linear(:(1 + (a + t)), :t) == true
+    @test expr_is_linear(:(1 + (a + 2t)), :t) == true
+    @test expr_is_linear(:(1 + (a + (t * t))), :t) == false
+    @test expr_is_linear(:(1 + (a + (q * q))), :t) === nothing # no t
+    @test expr_is_linear(:(1 + (a + (t) + t - t + 5)), :t) == false
 end
 
 "
@@ -148,7 +144,7 @@ Test if expression contains an linear combination of `x`.
     if non-linear w.r.g. `x`: false
     if heuristic cannot evaluate: nothing
 "
-expr_is_linear(ex, x::Symbol) = begin
+function expr_is_linear(ex, x::Symbol)
 
     # Can we skip the investigation?
     vars = get_vars(ex)
@@ -160,53 +156,54 @@ expr_is_linear(ex, x::Symbol) = begin
 
     # behaviour for each type
     recurse(args...) = nothing
-    recurse(ex::Symbol, linear_parents) = ex == x ? linear_parents : nothing 
-    recurse(ex::Expr, linear_parents) = begin
-        # Test if only + - and multiplication by a constant in t
-        if ex.head == :call && (ex.args[1] == :+ || ex.args[1] == :- || ex.args[1] == :*)
-            calls = [recurse(i, linear_parents) for i in ex.args]
+    recurse(ex::Symbol, linear_parents) = ex == x ? linear_parents : nothing
+    function recurse(ex::Expr, linear_parents)
+        begin
+            # Test if only + - and multiplication by a constant in t
+            if ex.head == :call &&
+                (ex.args[1] == :+ || ex.args[1] == :- || ex.args[1] == :*)
+                calls = [recurse(i, linear_parents) for i in ex.args]
 
-            if false in calls 
-                false
-            elseif true in calls
-                true
+                if false in calls
+                    false
+                elseif true in calls
+                    true
+                else
+                    nothing
+                end
             else
-                nothing
-            end
-        else
-            calls = [recurse(i, false) for i in ex.args]
-            if false in calls
-                false
-            else 
-                nothing
+                calls = [recurse(i, false) for i in ex.args]
+                if false in calls
+                    false
+                else
+                    nothing
+                end
             end
         end
     end
-    
 
     # call the recursion
     return recurse(ex, true)
 end
 
-
 @testset "get_nonindexed_vars" begin
-    @test get_nonindexed_vars(:(a+b[t]), :t) == Set([:a])
+    @test get_nonindexed_vars(:(a + b[t]), :t) == Set([:a])
     @test get_nonindexed_vars(:a, :t) == Set([:a])
-    @test get_nonindexed_vars(:(a+b[t]+c+t), :t) == Set([:a,:c])
+    @test get_nonindexed_vars(:(a + b[t] + c + t), :t) == Set([:a, :c])
 end
 
 "
 Collect all variables in an expression that isn't indexed by `x`
 "
-get_nonindexed_vars(ex, x::Symbol) = begin
+function get_nonindexed_vars(ex, x::Symbol)
     vars = Set()
     ex′ = Expr(:begin, ex)
 
     # behaviour for each type
     recurse(ex::Expr) = begin
-        i₁ = ex.head ∈ [:call, :macocall] ? 2 : 1 
-        for i ∈ i₁:length(ex.args)
-            if i==i₁ && ex.head == :ref 
+        i₁ = ex.head ∈ [:call, :macocall] ? 2 : 1
+        for i in i₁:length(ex.args)
+            if i == i₁ && ex.head == :ref
                 # nothing
             elseif ex.args[i] isa Symbol && ex.args[i] != x
                 push!(vars, ex.args[i])
@@ -214,115 +211,128 @@ get_nonindexed_vars(ex, x::Symbol) = begin
                 recurse(ex.args[i])
             end
         end
-    end 
+    end
 
     recurse(ex′)
     return vars
 end
 
-
 @testset "formulas_to_digraph" begin
-    dict = expr_to_formulas(quote
-        A[t] = (t == 1 ? 1 : A[t - 1]- C[t]) - D[t]
-        B[t] = t == 1 ? 1 : A[t - 1]
-        C[t] = ((B[t] * E[t]) / 12) * (1 - 0.5*F[t])
-        D[t] = B[t] * F[t] * (1 - 0.5*E)
-        Z = 1
-    end, :t)
+    dict = expr_to_formulas(
+        quote
+            A[t] = (t == 1 ? 1 : A[t - 1] - C[t]) - D[t]
+            B[t] = t == 1 ? 1 : A[t - 1]
+            C[t] = ((B[t] * E[t]) / 12) * (1 - 0.5 * F[t])
+            D[t] = B[t] * F[t] * (1 - 0.5 * E)
+            Z = 1
+        end,
+        :t,
+    )
 
     graph = formulas_to_digraph(dict)
 
     # Test forwards and backwards
     edges₁ = Set()
     edges₂ = Set()
-    for (var, links) ∈ graph.nodedict
-        for varᵢₙ ∈ links.in 
+    for (var, links) in graph.nodedict
+        for varᵢₙ in links.in
             push!(edges₁, varᵢₙ => var)
         end
-        for varₒ ∈ links.out 
+        for varₒ in links.out
             push!(edges₂, var => varₒ)
         end
     end
 
-    @test edges₁ == Set([:A=>:A, :C=>:A, :D=>:A, :A=>:B, :B=>:C, :B=>:D])
-    @test edges₂ == edges₁ 
+    @test edges₁ == Set([:A => :A, :C => :A, :D => :A, :A => :B, :B => :C, :B => :D])
+    @test edges₂ == edges₁
 end
 
 "
 Convert a formula dictionary into a directed graph describing the flow
 of all the variables.
 "
-formulas_to_digraph(formulas::OrderedDict{Symbol, SpreadFormula})::DiGraph{Symbol} = begin
+formulas_to_digraph(formulas::OrderedDict{Symbol,SpreadFormula})::DiGraph{Symbol} = begin
     # Convert the dictionary into a sequence
-    symbol_links = Dict(key => Vector{Symbol}() for key ∈ keys(formulas))
-    for (varⱼ, spreadformula) ∈ formulas
+    symbol_links = Dict(key => Vector{Symbol}() for key in keys(formulas))
+    for (varⱼ, spreadformula) in formulas
         ex = spreadformula.expr
-        for varᵢ ∈ get_vars(ex)
+        for varᵢ in get_vars(ex)
             haskey(formulas, varᵢ) && push!(symbol_links[varᵢ], varⱼ)
         end
     end
     SpreadRows.DiGraph(symbol_links)
 end
 
-
 "
 Calculate the possible calculation sequence of a graph
 "
-generate_calculation_sequence(graph::DiGraph; preferred_sequence=nothing) = begin
+function generate_calculation_sequence(graph::DiGraph; preferred_sequence=nothing)
     sequence = SpreadRows.traversalsequence(graph)
     if preferred_sequence !== nothing
-        sequence_bias = OrderedDict(var=>i for (i,var) ∈ enumerate(preferred_sequence))
-        sequence = [sort(clus, by=x->(sequence_bias[x])) for clus in sequence]
+        sequence_bias = OrderedDict(var => i for (i, var) in enumerate(preferred_sequence))
+        sequence = [sort(clus; by=x -> (sequence_bias[x])) for clus in sequence]
     end
 
     return sequence
 end
-
 
 @testset "expr_to_formulas" begin
     dict = expr_to_formulas(
         quote
             a = 1
             b[t] = cat
-            d = hello 
-        end, :t) 
+            d = hello
+        end,
+        :t,
+    )
 
     @test [keys(dict)...] == [:a, :b, :d]
 
-    @test [x.line isa LineNumberNode  for (_, x) ∈ dict] == [true, true, true]
-    
-    @test [SpreadFormula(x.expr, x.broadcast, nothing) for (_, x) ∈ dict] == [
+    @test [x.line isa LineNumberNode for (_, x) in dict] == [true, true, true]
+
+    @test [SpreadFormula(x.expr, x.broadcast, nothing) for (_, x) in dict] == [
         SpreadFormula(:(1), false, nothing)
         SpreadFormula(:(cat), true, nothing)
         SpreadFormula(:(hello), false, nothing)
-        ]
+    ]
 end
 
-expr_to_formulas(expr, x::Symbol; line::Union{Nothing, LineNumberNode}=nothing) = begin
+function expr_to_formulas(expr, x::Symbol; line::Union{Nothing,LineNumberNode}=nothing)
+
     # Convert to convenient form
     if !(expr isa Expr) || (expr.head != :(block))
         expr = Expr(:block, expr)
     end
 
     # Collect all definitions into dict (e.g. Dict(:A=>:(B+C), :B=>:(C+D))
-    formulas = OrderedDict{Symbol, SpreadFormula}()
+    formulas = OrderedDict{Symbol,SpreadFormula}()
     lastline = line
-    for e ∈ expr.args
+    for e in expr.args
         if e isa LineNumberNode || e === nothing
             lastline = e
             continue
         end
 
         if !(expr isa Expr) || (e.head != :(=))
-            throw(ErrorException("Only assignment expressions are valid, like `A = 5` and `A[$x] = 5`, got: $(e)"))
+            throw(
+                ErrorException(
+                    "Only assignment expressions are valid, like `A = 5` and `A[$x] = 5`, got: $(e)",
+                ),
+            )
         end
 
-        var, bcast =  if e.args[1] isa Symbol
+        var, bcast = if e.args[1] isa Symbol
             e.args[1], false
-        elseif e.args[1].head == :ref && e.args[1].args[1] isa Symbol && e.args[1].args[2:end] == [x]
+        elseif e.args[1].head == :ref &&
+            e.args[1].args[1] isa Symbol &&
+            e.args[1].args[2:end] == [x]
             e.args[1].args[1], true
         else
-            throw(ErrorException("Only assignment expressions are valid, like `A = 5` and `A[$x] = 5`, got: $(e)"))
+            throw(
+                ErrorException(
+                    "Only assignment expressions are valid, like `A = 5` and `A[$x] = 5`, got: $(e)",
+                ),
+            )
         end
 
         if haskey(formulas, var)
@@ -336,12 +346,11 @@ expr_to_formulas(expr, x::Symbol; line::Union{Nothing, LineNumberNode}=nothing) 
     return formulas
 end
 
-
 "
 Last item in an OrderedDict
 "
-last(d::OrderedDict) = begin
-    for (i, item) ∈ enumerate(d)
+function last(d::OrderedDict)
+    for (i, item) in enumerate(d)
         i == length(d) && return item
     end
 end
@@ -349,21 +358,19 @@ end
 "
 Subsample an OrderedDict
 "
-subsample(d::OrderedDict, keys) = begin
-    OrderedDict(i=>d[i] for i ∈ keys)
+function subsample(d::OrderedDict, keys)
+    return OrderedDict(i => d[i] for i in keys)
 end
 
-
 "
-This will transform `varname` into a scrabled new symgenx version.
+This will transform `varname` into a scrabled new symgenx type version. 
 Same input will have same output.
 "
-symgenx_reproduce(varname) = begin
-    str = [i for i ∈ "₀₁₂₃₄₅₆₇₈₉ₐₑₒₓₔ"]
-    choice = [str[(i%length(str))+1] for i ∈ sha1(varname)[1:8]]
-    return Symbol("ₓ" * join(choice[1:3]) * string(varname) * join(choice[4:end]))
+function symgenx_reproduce(varname)
+    samplespace = [i for i in "₀₁₂₃₄₅₆₇₈₉ₐₑᵢⱼₒᵣₓₔ"]
+    samples = [samplespace[(i % length(samplespace)) + 1] for i in sha1(varname)[1:6]]
+    return Symbol(string("ₓ", samples[1]..., varname, samples[2:6]...))
 end
-
 
 "
 Convenience method for generating same unique reproducable symbol.
@@ -371,36 +378,33 @@ Convenience method for generating same unique reproducable symbol.
 reproducable_init_symbol(var) = symgenx_reproduce(string(var) * "_init")
 reproducable_map_symbol(var) = symgenx_reproduce(string(var) * "_map")
 
-boundrycheck_transformer(vars) = begin	
-	x -> begin
-		if x isa Expr && x.head == :ref && x.args[1] ∈ vars
-			var = x.args[1]
-			if length(x.args) != 2
-				throw(error("`$x` should only be one-dimensional indexing"))
-			end
-			
-			@gensymx i
-			ival = SpreadRows.replace_var(
-				SpreadRows.replace_var(
-					x.args[2],
-					:begin,
-					:(firstindex($var))
-				),
-				:end,
-				:(lastindex($var))
-			)
-			err = "Referenced `$x` before initialized."
+function boundrycheck_transformer(vars)
+    return x -> begin
+        if x isa Expr && x.head == :ref && x.args[1] ∈ vars
+            var = x.args[1]
+            if length(x.args) != 2
+                throw(error("`$x` should only be one-dimensional indexing"))
+            end
 
-			Expr(:block, 
-				Expr(:(=), i, ival),
-				Expr(:(||), Expr(:ref, reproducable_map_symbol(var), i),
-							Expr(:call,
-								 :throw,
-								 :($calculation_sequence_error($err)))),
-				Expr(:ref, var, i)
-			)
-		else
-			x
-		end
-	end
+            @gensymx i
+            ival = SpreadRows.replace_var(
+                SpreadRows.replace_var(x.args[2], :begin, :(firstindex($var))),
+                :end,
+                :(lastindex($var)),
+            )
+            err = "Referenced `$x` before initialized."
+
+            :($i = $ival;
+            try
+                $var[$i]
+            catch e
+                if e isa UndefRefError
+                    throw($calculation_sequence_error($err))
+                end
+                rethrow()
+            end)
+        else
+            x
+        end
+    end
 end

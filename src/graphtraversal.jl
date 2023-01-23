@@ -1,234 +1,253 @@
 @testset "graphtraversal" begin
-    edges = [(:x1, :x2),
-             (:x1, :x1),
-             (:x2, :x3),
-             (:x3, :x4),
-             (:x4, :x5),
-             (:x5, :x6),
-             (:x5, :x8),
-             (:x8, :x3),
-             (:x8, :x9),
-             (:x6, :x7)]
+    edges = [
+        (:x1, :x2),
+        (:x1, :x1),
+        (:x2, :x3),
+        (:x3, :x4),
+        (:x4, :x5),
+        (:x5, :x6),
+        (:x5, :x8),
+        (:x8, :x3),
+        (:x8, :x9),
+        (:x6, :x7),
+    ]
 
     graph₁ = SpreadRows.DiGraph(edges)
 
     # (i → j) and (j → k)
-    for (j, node) ∈ graph₁.nodedict
-        for i ∈ node.in
-            @test (i,j) ∈ edges
+    for (j, node) in graph₁.nodedict
+        for i in node.in
+            @test (i, j) ∈ edges
         end
-        for k ∈ node.out
-            @test (j,k) ∈ edges
+        for k in node.out
+            @test (j, k) ∈ edges
         end
     end
 
-    deps = Dict(:x1 => [:x1, :x2, ],
-                :x2 => [:x3],
-                :x3 => [:x4],
-                :x4 => [:x5],
-                :x5 => [:x6, :x8],
-                :x6 => [:x7],
-                :x8 => [:x3, :x9]
-                )
+    deps = Dict(
+        :x1 => [:x1, :x2],
+        :x2 => [:x3],
+        :x3 => [:x4],
+        :x4 => [:x5],
+        :x5 => [:x6, :x8],
+        :x6 => [:x7],
+        :x8 => [:x3, :x9],
+    )
     graph₂ = SpreadRows.DiGraph(deps)
 
     # Test if both approaches for building a graph are the same
     @test all(keys(graph₁.nodedict) .== keys(graph₂.nodedict))
-    @test all([graph₁.nodedict[k].out == graph₂.nodedict[k].out for k ∈ keys(graph₁.nodedict)])
-    @test all([graph₁.nodedict[k].in == graph₂.nodedict[k].in for k ∈ keys(graph₁.nodedict)])
+    @test all([
+        graph₁.nodedict[k].out == graph₂.nodedict[k].out for k in keys(graph₁.nodedict)
+    ])
+    @test all([
+        graph₁.nodedict[k].in == graph₂.nodedict[k].in for k in keys(graph₁.nodedict)
+    ])
 
-    @test SpreadRows.traversalsequence(graph₁) == [[:x1], [:x2], [:x5, :x3, :x8, :x4], [:x9], [:x6], [:x7]]
+    @test SpreadRows.traversalsequence(graph₁) ==
+        [[:x1], [:x2], [:x5, :x3, :x8, :x4], [:x9], [:x6], [:x7]]
 
-
-    deps = Dict{Symbol, Vector{Symbol}}(
-                :x1 => [:x1, :x2, ],
-                :x2 => [:x3],
-                :x3 => [:x4],
-                :x4 => [:x5],
-                :x5 => [:x6, :x8],
-                :x6 => [:x7],
-                :x8 => [:x3, :x9],
-                :x10 => []
-                )
+    deps = Dict{Symbol,Vector{Symbol}}(
+        :x1 => [:x1, :x2],
+        :x2 => [:x3],
+        :x3 => [:x4],
+        :x4 => [:x5],
+        :x5 => [:x6, :x8],
+        :x6 => [:x7],
+        :x8 => [:x3, :x9],
+        :x10 => [],
+    )
     graph₃ = SpreadRows.DiGraph(deps)
-    @test SpreadRows.traversalsequence(graph₃) == [[:x10], [:x1], [:x2], [:x5, :x3, :x8, :x4], [:x9], [:x6], [:x7]]
+    @test SpreadRows.traversalsequence(graph₃) ==
+        [[:x10], [:x1], [:x2], [:x5, :x3, :x8, :x4], [:x9], [:x6], [:x7]]
 end
-
 
 struct DiNode{T}
     in::Set{T}
     out::Set{T}
-	
-    DiNode{T}() where T = new{T}(Set{T}(), Set{T}())
-end
 
+    DiNode{T}() where {T} = new{T}(Set{T}(), Set{T}())
+end
 
 struct DiGraph{T}
-	nodedict::Dict{T,DiNode{T}}
-	DiGraph{T}() where T = new{T}(Dict{T,DiNode{T}}())
+    nodedict::Dict{T,DiNode{T}}
+    DiGraph{T}() where {T} = new{T}(Dict{T,DiNode{T}}())
 end
 
+traversalsequence(graph::DiGraph{T}) where {T} = traversalsequence!(deepcopy(graph))
 
-traversalsequence(graph::DiGraph{T}) where T = traversalsequence!(deepcopy(graph))
+function traversalsequence!(graph::DiGraph{T}) where {T}
+    headseq = Vector{T}()
+    tailseq = Vector{T}()
+    queue = Vector{T}() # Ordered set is better
+    strongclusters = Dict{T,Set{T}}()
 
-traversalsequence!(graph::DiGraph{T})  where T = begin 
+    # viable? then add to queue
+    function lazyaddtoqueue!(id)
+        if length(graph.nodedict[id].in) * length(graph.nodedict[id].out) == 0
+            push!(queue, id)
+        end
+    end
 
-	headseq = Vector{T}()
-	tailseq = Vector{T}()
-	queue = Vector{T}() # Ordered set is better
-	strongclusters = Dict{T, Set{T}}()
+    # !!! only valid if there are no branches or roots left
+    function findcycleintrimmedgraph()
+        begin
+            id, node = first(graph.nodedict)
 
+            seqset = Set{T}()
+            seq = Vector{T}() # use like ordered set
 
-	# viable? then add to queue
-	lazyaddtoqueue!(id) = if length(graph.nodedict[id].in)*length(graph.nodedict[id].out) == 0
-		push!(queue, id)
-	end
+            idᵢ = id
+            while !(idᵢ ∈ seqset)
+                push!(seqset, idᵢ)
+                push!(seq, idᵢ)
+                idᵢ = first(graph.nodedict[idᵢ].out)
+            end
 
-	# !!! only valid if there are no branches or roots left
-	findcycleintrimmedgraph() = begin
-		id, node = first(graph.nodedict)
-		
-		seqset = Set{T}()
-		seq = Vector{T}() # use like ordered set
+            # Only keep the cyclic part
+            for (i, idⱼ) in enumerate(seq)
+                if idⱼ == idᵢ
+                    return seq[i:end]
+                end
+            end
 
-		idᵢ = id
-		while !(idᵢ ∈ seqset)
-			push!(seqset, idᵢ)
-			push!(seq, idᵢ)
-			idᵢ = first(graph.nodedict[idᵢ].out)
-		end
+            raise(
+                ErrorException(
+                    "Could not find cycle in graph.nodedict $(graph.nodedict) starting from $(id)",
+                ),
+            )
+            return seq
+        end
+    end
 
-		# Only keep the cyclic part
-		for (i, idⱼ) ∈ enumerate(seq)
-			if idⱼ == idᵢ
-				return seq[i:end]
-			end
-		end
-		
-		raise(ErrorException(
-				"Could not find cycle in graph.nodedict $(graph.nodedict) starting from $(id)"))
-		return seq
-	end
+    # for a group of ids merge together into single node
+    function mergeids!(ids)
+        begin
+            idₙ = ids[1] # reuse the first ID
+            nodeₙ = DiNode{T}()
 
-	# for a group of ids merge together into single node
-	mergeids!(ids)  = begin
-		idₙ = ids[1] # reuse the first ID
-		nodeₙ = DiNode{T}()
+            for idᵢ in ids
+                nodeᵢ = graph.nodedict[idᵢ]
 
-		for idᵢ ∈ ids
-			nodeᵢ = graph.nodedict[idᵢ]
+                for idⱼ in nodeᵢ.out
+                    if idⱼ != idₙ
+                        push!(nodeₙ.out, idⱼ)
+                        pop!(graph.nodedict[idⱼ].in, idᵢ)
+                        push!(graph.nodedict[idⱼ].in, idₙ)
+                    end
+                end
 
-			for idⱼ ∈ nodeᵢ.out
-				if idⱼ != idₙ
-					push!(nodeₙ.out, idⱼ)
-					pop!(graph.nodedict[idⱼ].in, idᵢ) 
-					push!(graph.nodedict[idⱼ].in, idₙ)
-				end
-			end
+                for idⱼ in nodeᵢ.in
+                    if idⱼ != idₙ
+                        push!(nodeₙ.in, idⱼ)
+                        pop!(graph.nodedict[idⱼ].out, idᵢ)
+                        push!(graph.nodedict[idⱼ].out, idₙ)
+                    end
+                end
 
-			for idⱼ ∈ nodeᵢ.in
-				if idⱼ != idₙ
-					push!(nodeₙ.in, idⱼ)
-					pop!(graph.nodedict[idⱼ].out, idᵢ) 
-					push!(graph.nodedict[idⱼ].out, idₙ)
-				end
-			end
+                # remove idᵢ from collective histroy
+                pop!(graph.nodedict, idᵢ)
+                if idᵢ ∈ nodeₙ.out
+                    pop!(nodeₙ.out, idᵢ)
+                end
+                if idᵢ ∈ nodeₙ.in
+                    pop!(nodeₙ.in, idᵢ)
+                end
+            end
 
-			# remove idᵢ from collective histroy
-			pop!(graph.nodedict, idᵢ)
-			if idᵢ ∈ nodeₙ.out pop!(nodeₙ.out, idᵢ) end
-			if idᵢ ∈ nodeₙ.in pop!(nodeₙ.in, idᵢ) end
-		end
+            graph.nodedict[idₙ] = nodeₙ
+            strongclusters[idₙ] = Set{T}(ids) ∪ get(strongclusters, idₙ, [])
 
-		graph.nodedict[idₙ] = nodeₙ
-		strongclusters[idₙ] = Set{T}(ids) ∪ get(strongclusters, idₙ, [])
+            # merge cluster with other strong clusters
+            for idₘ in setdiff!(ids ∩ keys(strongclusters), [idₙ])
+                push!(strongclusters[idₙ], pop!(strongclusters, idₘ)...)
+            end
 
-		# merge cluster with other strong clusters
-		for idₘ ∈ setdiff!(ids ∩ keys(strongclusters), [idₙ])
-			push!(strongclusters[idₙ], pop!(strongclusters, idₘ)...)
-		end
+            return idₙ
+        end
+    end
 
-		return idₙ
-	end
+    for (id, node) in graph.nodedict
+        lazyaddtoqueue!(id)
+    end
 
-	for (id, node) ∈ graph.nodedict
-		lazyaddtoqueue!(id)
-	end
+    while (length(graph.nodedict) != 0)
+        if length(queue) == 0
+            # find a cycle and merge it
+            seq = findcycleintrimmedgraph()
+            idₙ = mergeids!(seq)
+            lazyaddtoqueue!(idₙ)
 
-	while(length(graph.nodedict) != 0)
+        else
+            idᵢ = pop!(queue)
+            (nodeᵢ = get(graph.nodedict, idᵢ, nothing)) === nothing && continue
 
-		if length(queue) == 0
-			# find a cycle and merge it
-			seq = findcycleintrimmedgraph()
-			idₙ = mergeids!(seq)
-			lazyaddtoqueue!(idₙ)
+            # trim either a root or a branch
+            if length(nodeᵢ.in) == 0
+                push!(headseq, idᵢ)
+                for idⱼ in nodeᵢ.out
+                    pop!(graph.nodedict[idⱼ].in, idᵢ)
+                    lazyaddtoqueue!(idⱼ)
+                end
 
-		else
-			idᵢ=pop!(queue)
-			(nodeᵢ = get(graph.nodedict, idᵢ, nothing)) === nothing && continue
+            elseif length(nodeᵢ.out) == 0
+                insert!(tailseq, 1, idᵢ)
+                for idⱼ in nodeᵢ.in
+                    pop!(graph.nodedict[idⱼ].out, idᵢ)
+                    lazyaddtoqueue!(idⱼ)
+                end
+            end
 
-			# trim either a root or a branch
-			if length(nodeᵢ.in) == 0
-				push!(headseq, idᵢ)
-				for idⱼ ∈ nodeᵢ.out
-					pop!(graph.nodedict[idⱼ].in, idᵢ)
-					lazyaddtoqueue!(idⱼ)
-				end
+            pop!(graph.nodedict, idᵢ)
+        end
+    end
 
-			elseif length(nodeᵢ.out) == 0
-				insert!(tailseq, 1, idᵢ)
-				for idⱼ ∈ nodeᵢ.in
-					pop!(graph.nodedict[idⱼ].out, idᵢ)
-					lazyaddtoqueue!(idⱼ)
-				end
-			end
+    sequence = Vector{Union{T,Vector{T}}}()
+    for i in Iterators.flatten((headseq, tailseq))
+        if haskey(strongclusters, i)
+            push!(sequence, collect(strongclusters[i]))
+        else
+            push!(sequence, [i])
+        end
+    end
 
-			pop!(graph.nodedict, idᵢ)
-
-		end
-	end
-
-	sequence = Vector{Union{T, Vector{T}}}()
-	for i ∈ Iterators.flatten((headseq, tailseq))
-		if haskey(strongclusters, i)
-			push!(sequence, collect(strongclusters[i]))
-		else
-			push!(sequence, [i])
-		end		
-	end
-
-	return sequence
+    return sequence
 end
 
+function DiGraph(edges::Vector{<:Union{Vector{T},Tuple{T,T}}}) where {T}
+    graph = DiGraph{T}()
+    for (i, j) in edges
+        if !haskey(graph.nodedict, i)
+            graph.nodedict[i] = DiNode{T}()
+        end
+        if !haskey(graph.nodedict, j)
+            graph.nodedict[j] = DiNode{T}()
+        end
 
-DiGraph(edges::Vector{<:Union{Vector{T}, Tuple{T, T}}}) where T= begin
-	graph = DiGraph{T}()
-	for (i,j) ∈ edges
-		if ! haskey(graph.nodedict, i)  graph.nodedict[i] = DiNode{T}() end
-		if ! haskey(graph.nodedict, j)  graph.nodedict[j] = DiNode{T}() end
+        push!(graph.nodedict[i].out, j)
+        push!(graph.nodedict[j].in, i)
+    end
 
-		push!(graph.nodedict[i].out, j)
-		push!(graph.nodedict[j].in, i)
-
-	end
-
-	graph
+    return graph
 end
 
+function DiGraph(mapping::Dict{T,<:Union{Vector{T},Set{T}}}) where {T}
+    graph = DiGraph{T}()
 
-DiGraph(mapping::Dict{T,<:Union{Vector{T},Set{T}}}) where T  = begin
-	graph = DiGraph{T}()
+    for (i, outs) in mapping
+        if !haskey(graph.nodedict, i)
+            graph.nodedict[i] = DiNode{T}()
+        end
 
-	for (i, outs) ∈ mapping
-		if ! haskey(graph.nodedict, i)  graph.nodedict[i] = DiNode{T}() end
-		
-		for j ∈ outs
-			if ! haskey(graph.nodedict, j)  graph.nodedict[j] = DiNode{T}() end
+        for j in outs
+            if !haskey(graph.nodedict, j)
+                graph.nodedict[j] = DiNode{T}()
+            end
 
-			push!(graph.nodedict[i].out, j)
-			push!(graph.nodedict[j].in, i)
-		end
-	end
+            push!(graph.nodedict[i].out, j)
+            push!(graph.nodedict[j].in, i)
+        end
+    end
 
-	graph
+    return graph
 end
