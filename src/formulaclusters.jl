@@ -178,7 +178,7 @@ function formula_cluster_to_expr(
 
         definitions = Expr(:block)
         for var in seq
-            eq = :($(var) = Vector(undef, length($X)))
+            eq = Expr(:(=), var, Expr(:call, :Vector, :undef, Expr(:call, :length, X)))
             push!(definitions.args, initwrap(
                 var,
                 if formulas[var].line === nothing
@@ -189,7 +189,7 @@ function formula_cluster_to_expr(
             ))
         end
 
-        loopover = rtype > 0 ? :(reverse($X)) : X
+        loopover = rtype > 0 ? Expr(:call, reverse, X) : X
 
         f_bounds = boundrycheck_transformer(seq)
         assignments = Expr(:block)
@@ -199,7 +199,7 @@ function formula_cluster_to_expr(
             end
             push!(
                 assignments.args,
-                :($(var)[$x] = $(MacroTools.postwalk(f_bounds, formulas[var].expr))),
+                Expr(:(=), Expr(:ref, var, x), MacroTools.postwalk(f_bounds, formulas[var].expr))
             )
         end
 
