@@ -281,12 +281,13 @@ function boundrycheck_transformer(vars)
 
             @gensymx i
             ival = SpreadRows.replace_var(
-                SpreadRows.replace_var(x.args[2], :begin, :(firstindex($var))),
+                SpreadRows.replace_var(x.args[2], :begin, Expr(:call, firstindex, var)),
                 :end,
-                :(lastindex($var)),
+                Expr(:call, lastindex, var),
             )
             err = "Referenced `$x` before initialized."
 
+            #=
             :($i = $ival;
             try
                 $var[$i]
@@ -296,6 +297,32 @@ function boundrycheck_transformer(vars)
                 end
                 rethrow()
             end)
+            =#
+            Expr(
+                :block,
+                Expr(:(=), i, ival),
+                Expr(
+                    :try,
+                    Expr(:block, Expr(:ref, var, i)),
+                    :e,
+                    Expr(
+                        :block,
+                        Expr(
+                            :if,
+                            Expr(:call, :isa, :e, :UndefRefError),
+                            Expr(
+                                :block,
+                                Expr(
+                                    :call,
+                                    :throw,
+                                    Expr(:call, calculation_sequence_error, err),
+                                ),
+                            ),
+                        ),
+                        Expr(:call, :rethrow),
+                    ),
+                ),
+            )
         else
             x
         end

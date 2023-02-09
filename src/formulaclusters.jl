@@ -112,7 +112,6 @@ function formula_cluster_topology(formulas::OrderedDict, x::Symbol)
     return rtype, sequence
 end
 
-
 "
 Transform a cluster of formulae/equations that is possibly cyclic `:(B = t==1 ? 1 : A[t-1]; A = B[t])`
 into a coherent forloop `:(for t ∈ T A[t] = B[t]; B[t] = t==1 ? 1 : A[t-1] end)`.
@@ -137,21 +136,26 @@ function formula_cluster_to_expr(
 
         # No broadcast, normal equality
         if !spreadformula.broadcast
-            initwrap(var, Expr(:block, spreadformula.line, Expr(:(=), var, e)))
+            eq = Expr(:(=), var, e)
+            initwrap(
+                var,
+                if spreadformula.line === nothing
+                    eq
+                else
+                    Expr(:block, spreadformula.line, eq)
+                end,
+            )
 
             # Broadcast via list comprehension
         elseif !has_var(e, var)
+            eq = Expr(:(=), var, Expr(:comprehension, Expr(:generator, e, Expr(:(=), x, X))))
             initwrap(
                 var,
-                Expr(
-                    :block,
-                    spreadformula.line,
-                    Expr(
-                        :(=),
-                        var,
-                        Expr(:comprehension, Expr(:generator, e, Expr(:(=), x, X))),
-                    ),
-                ),
+                if spreadformula.line === nothing
+                    eq
+                else
+                    Expr(:block, spreadformula.line, eq)
+                end,
             )
         end
     end
@@ -174,13 +178,15 @@ function formula_cluster_to_expr(
 
         definitions = Expr(:block)
         for var in seq
-            push!(
-                definitions.args,
-                initwrap(
-                    var,
-                    Expr(:block, formulas[var].line, :($(var) = Vector(undef, length($X)))),
-                ),
-            )
+            eq = :($(var) = Vector(undef, length($X)))
+            push!(definitions.args, initwrap(
+                var,
+                if formulas[var].line === nothing
+                    eq
+                else
+                    Expr(:block, formulas[var].line, eq)
+                end,
+            ))
         end
 
         loopover = rtype > 0 ? :(reverse($X)) : X
@@ -188,14 +194,16 @@ function formula_cluster_to_expr(
         f_bounds = boundrycheck_transformer(seq)
         assignments = Expr(:block)
         for var in seq
-            push!(assignments.args, formulas[var].line)
+            if formulas[var].line !== nothing
+                push!(assignments.args, formulas[var].line)
+            end
             push!(
                 assignments.args,
                 :($(var)[$x] = $(MacroTools.postwalk(f_bounds, formulas[var].expr))),
             )
         end
 
-        @gensymx e
+        #=
         ret = (
             quote
                 $definitions
@@ -204,6 +212,12 @@ function formula_cluster_to_expr(
                 end
                 nothing
             end
+        )
+        =#
+        ret = Expr(
+            :block,
+            definitions.args...,
+            Expr(:for, Expr(:(=), x, loopover), Expr(:block, assignments.args...)),
         )
     end
 

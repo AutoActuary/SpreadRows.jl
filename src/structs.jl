@@ -153,8 +153,8 @@ function SpreadConfig(expriter, exprbody, construct::Bool=true; source=nothing)
     else
         if funcdef === nothing
             ErrorException(
-                "Iteration definition (e.g. `x ∈ X = 1:10`) must either be the first argument, " *
-                "or be withing a function definition (e.g. foo(a,b,x∈X=1:10;c=9) = ...)",
+                "Iteration definition (e.g. `x ∈ X = 1:10`) must either be the first argument to the @spreads macro, " *
+                "or be withing a function definition (e.g. `foo(a, b, x ∈ X=1:10) = ...`)",
             )
         else
             for key in (:args, :kwargs)
