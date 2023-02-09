@@ -1,7 +1,6 @@
 module SpreadRows
 export @spread
 
-using ReTest
 using DataStructures: OrderedDict, OrderedSet
 using GenSymx
 using SHA: sha1
