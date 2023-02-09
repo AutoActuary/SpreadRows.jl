@@ -1,26 +1,3 @@
-@testset "formula_cluster_topology" begin
-    formulas = OrderedDict(
-        :A => :((t == 1 ? 1 : A[t - 1] - C[t]) - D[t]),
-        :B => :(t == 1 ? 1 : A[t - 1]),
-        :C => :(((B[t] * E[t]) / 12) * (1 - 0.5 * F[t])),
-        :D => :(B[t] * F[t] * (1 - 0.5 * E)),
-    )
-    @test formula_cluster_topology(formulas, :t) == (-1, [:B, :C, :D, :A])
-
-    formulas = OrderedDict(
-        :A => :((t == 1 ? 1 : A[t - 1] - C[t]) - D),
-        :B => :(t == 1 ? 1 : A[t - 1]),
-        :C => :(((B[t] * E[t]) / 12) * (1 - 0.5 * F[t])),
-        :D => :(B[t] * F[t] * (1 - 0.5 * E)),
-    )
-    @test_throws CalculationSequenceError formula_cluster_topology(formulas, :t)
-
-    @test_throws CalculationSequenceError @spread i ∈ 1:10 begin
-        a[i] = b[i]
-        b[i] = a[i]
-    end
-end
-
 calculationsequenceerrormessage = join(
     strip.(
         split(
@@ -135,21 +112,6 @@ function formula_cluster_topology(formulas::OrderedDict, x::Symbol)
     return rtype, sequence
 end
 
-@testset "formula_cluster_to_expr" begin
-    dict = expr_to_formulas(
-        quote
-            A[t] = (t == 1 ? 1 : A[t - 1] - C[t]) - D[t]
-            B[t] = t == 1 ? 1 : A[t - 1]
-            C[t] = (B[t] / 12) * (1 - 0.5 * B[t])
-            D[t] = B[t] * 0.5
-        end,
-        :t,
-    )
-
-    @test collect(keys(dict)) == [:A, :B, :C, :D]
-    @test eval(Expr(:block, :(T = 1:10), formula_cluster_to_expr(dict, :t, :T), :B)) isa
-        Vector
-end
 
 "
 Transform a cluster of formulae/equations that is possibly cyclic `:(B = t==1 ? 1 : A[t-1]; A = B[t])`

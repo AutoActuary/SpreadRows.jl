@@ -1,16 +1,3 @@
-using ExprTools: ExprTools
-using DocStringExtensions
-
-@testset "SpreadConfig" begin
-    @test SpreadConfig(:(x ∈ X = 1:10), :(
-        begin
-            p[x] = 5
-        end
-    )) !== nothing
-    @test SpreadConfig(:(x ∈ X = 1:10), :(function (_) end)) !== nothing
-    @test SpreadConfig(:(function (x in X=1:10,) end)) !== nothing
-end
-
 struct SpreadIteratorError <: Exception
     var::String
 end

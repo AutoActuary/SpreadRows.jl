@@ -7,6 +7,8 @@ using GenSymx
 using SHA: sha1
 using ExprTools: ExprTools
 using MacroTools: MacroTools
+using DocStringExtensions
+
 
 include("graphtraversal.jl")
 include("structs.jl")

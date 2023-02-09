@@ -1,42 +1,20 @@
 "
 Function to make testing between macros easier
 "
-striplines(ex) = begin
-    ex′ = Expr(:block, deepcopy(ex))
+striplines(ex) = MacroTools.postwalk(x -> x isa LineNumberNode ? nothing : x, ex)
 
-    # Define the mutation
-    recurse(ex) = begin
-        if ex isa Expr
-            for i in 1:length(ex.args)
-                if ex.args[i] isa LineNumberNode
-                    ex.args[i] = nothing
-                else
-                    recurse(ex.args[i])
-                end
-            end
+"
+Test if an expression contains the specific variable
+"
+has_var(ex, s::Symbol) = begin
+    did_find = [false]
+    MacroTools.postwalk(ex) do x
+        if x == s
+            did_find[1] = true
         end
+        x
     end
-
-    recurse(ex′)
-
-    ex = ex′.args[1]
-    return ex
-end
-
-@testset "has_var" begin
-    @test has_var(:(a + b + c + foo(a + b + c + foo(d))), :d)
-    @test !has_var(:(a + b + c + foo(a + b + c + foo(d))), :q)
-end
-
-"
-Test if an expression contains the specefic variable
-"
-has_var(ex::Expr, s::Symbol) = any(has_var.(ex.args, s))
-has_var(ex::Symbol, s::Symbol) = ex == s
-has_var(ex, s::Symbol) = false
-
-@testset "get_vars" begin
-    @test get_vars(:(a = foo(b + c + bar(d) + e[f]))) == [:a, :b, :c, :d, :e, :f]
+    return did_find[1]
 end
 
 "
@@ -61,7 +39,7 @@ function get_vars(ex)
 end
 
 "
-Replace a variable within an expression with anything
+Replace a variable (excluding macro names and function names) within an expression with anything
 "
 function replace_var(ex, var::Symbol, value)
     begin
@@ -85,14 +63,6 @@ function replace_var(ex, var::Symbol, value)
         ex = ex′.args[1]
         return ex
     end
-end
-
-@testset "get_indexing" begin
-    @test(get_indexing(:(a[5] + a[8] + b[t + 40]), :t) == [:b => :(t + 40)])
-    @test(
-        get_indexing(:(a[5] + a[8] + b[t + 40] + b[t - 30] + c[t]), :t) ==
-            [:b => :(t + 40), :b => :(t - 30), :c => :t]
-    )
 end
 
 "
@@ -121,27 +91,10 @@ function get_indexing(ex, x::Symbol)::Vector{Pair{Symbol,Any}}
     return references
 end
 
-@testset "expr_is_linear" begin
-    @test expr_is_linear(:(t * t), :t) == false
-    @test expr_is_linear(:(t^2), :t) == false
-    @test expr_is_linear(:((5 + 67) * foo(t)), :t) == false
-    @test expr_is_linear(:(t == 0 ? 1 : 2), :t) == false
-
-    @test expr_is_linear(:(t + 1 + 2 / 3 * 5), :t)
-    @test expr_is_linear(:(t * 2 + 1 + 2 / 3 * 5), :t)
-    @test expr_is_linear(:((5 + 67) * t), :t)
-
-    @test expr_is_linear(:(1 + (a + t)), :t) == true
-    @test expr_is_linear(:(1 + (a + 2t)), :t) == true
-    @test expr_is_linear(:(1 + (a + (t * t))), :t) == false
-    @test expr_is_linear(:(1 + (a + (q * q))), :t) === nothing # no t
-    @test expr_is_linear(:(1 + (a + (t) + t - t + 5)), :t) == false
-end
-
 "
 Test if expression contains an linear combination of `x`.
     if linear w.r.t. `x`: true
-    if non-linear w.r.g. `x`: false
+    if non-linear w.r.t. `x`: false
     if heuristic cannot evaluate: nothing
 "
 function expr_is_linear(ex, x::Symbol)
@@ -150,46 +103,37 @@ function expr_is_linear(ex, x::Symbol)
     vars = get_vars(ex)
     if !(x in vars)
         return nothing
-    elseif [i for i in vars if i == x] != [x]
+    elseif [i for i in vars if i == x] != [x] # two or more x's
         return false
     end
 
     # behaviour for each type
-    recurse(args...) = nothing
+    recurse(ex, linear_parents) = nothing
     recurse(ex::Symbol, linear_parents) = ex == x ? linear_parents : nothing
     function recurse(ex::Expr, linear_parents)
-        begin
-            # Test if only + - and multiplication by a constant in t
-            if ex.head == :call &&
-                (ex.args[1] == :+ || ex.args[1] == :- || ex.args[1] == :*)
-                calls = [recurse(i, linear_parents) for i in ex.args]
+        # Test if only + - and multiplication by a constant in t
+        if ex.head == :call && (ex.args[1] == :+ || ex.args[1] == :- || ex.args[1] == :*) # what about division?
+            calls = [recurse(i, linear_parents) for i in ex.args]
 
-                if false in calls
-                    false
-                elseif true in calls
-                    true
-                else
-                    nothing
-                end
+            if false in calls
+                false
+            elseif true in calls
+                true
             else
-                calls = [recurse(i, false) for i in ex.args]
-                if false in calls
-                    false
-                else
-                    nothing
-                end
+                nothing
+            end
+        else
+            calls = [recurse(i, false) for i in ex.args]
+            if false in calls
+                false
+            else
+                nothing
             end
         end
     end
 
     # call the recursion
     return recurse(ex, true)
-end
-
-@testset "get_nonindexed_vars" begin
-    @test get_nonindexed_vars(:(a + b[t]), :t) == Set([:a])
-    @test get_nonindexed_vars(:a, :t) == Set([:a])
-    @test get_nonindexed_vars(:(a + b[t] + c + t), :t) == Set([:a, :c])
 end
 
 "
@@ -215,36 +159,6 @@ function get_nonindexed_vars(ex, x::Symbol)
 
     recurse(ex′)
     return vars
-end
-
-@testset "formulas_to_digraph" begin
-    dict = expr_to_formulas(
-        quote
-            A[t] = (t == 1 ? 1 : A[t - 1] - C[t]) - D[t]
-            B[t] = t == 1 ? 1 : A[t - 1]
-            C[t] = ((B[t] * E[t]) / 12) * (1 - 0.5 * F[t])
-            D[t] = B[t] * F[t] * (1 - 0.5 * E)
-            Z = 1
-        end,
-        :t,
-    )
-
-    graph = formulas_to_digraph(dict)
-
-    # Test forwards and backwards
-    edges₁ = Set()
-    edges₂ = Set()
-    for (var, links) in graph.nodedict
-        for varᵢₙ in links.in
-            push!(edges₁, varᵢₙ => var)
-        end
-        for varₒ in links.out
-            push!(edges₂, var => varₒ)
-        end
-    end
-
-    @test edges₁ == Set([:A => :A, :C => :A, :D => :A, :A => :B, :B => :C, :B => :D])
-    @test edges₂ == edges₁
 end
 
 "
@@ -274,27 +188,6 @@ function generate_calculation_sequence(graph::DiGraph; preferred_sequence=nothin
     end
 
     return sequence
-end
-
-@testset "expr_to_formulas" begin
-    dict = expr_to_formulas(
-        quote
-            a = 1
-            b[t] = cat
-            d = hello
-        end,
-        :t,
-    )
-
-    @test [keys(dict)...] == [:a, :b, :d]
-
-    @test [x.line isa LineNumberNode for (_, x) in dict] == [true, true, true]
-
-    @test [SpreadFormula(x.expr, x.broadcast, nothing) for (_, x) in dict] == [
-        SpreadFormula(:(1), false, nothing)
-        SpreadFormula(:(cat), true, nothing)
-        SpreadFormula(:(hello), false, nothing)
-    ]
 end
 
 function expr_to_formulas(expr, x::Symbol; line::Union{Nothing,LineNumberNode}=nothing)
