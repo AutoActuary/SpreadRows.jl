@@ -94,8 +94,8 @@ end
 "
 Test if expression contains an linear combination of `x`.
     if linear w.r.t. `x`: true
-    if non-linear w.r.t. `x`: false
-    if heuristic cannot evaluate: nothing
+    if not explicitely linear w.r.t. `x`: false
+    if `x` not in expression or cannot heuristically evaluate: nothing
 "
 function expr_is_linear(ex, x::Symbol)
 
@@ -112,7 +112,7 @@ function expr_is_linear(ex, x::Symbol)
     recurse(ex::Symbol, linear_parents) = ex == x ? linear_parents : nothing
     function recurse(ex::Expr, linear_parents)
         # Test if only + - and multiplication by a constant in t
-        if ex.head == :call && (ex.args[1] == :+ || ex.args[1] == :- || ex.args[1] == :*) # what about division?
+        if ex.head == :call && (ex.args[1] == :+ || ex.args[1] == :- || ex.args[1] == :*) # division? No, because Int -> Float
             calls = [recurse(i, linear_parents) for i in ex.args]
 
             if false in calls

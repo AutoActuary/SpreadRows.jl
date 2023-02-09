@@ -42,8 +42,8 @@ end
     edges₁ = Set()
     edges₂ = Set()
     for (var, links) in graph.nodedict
-        for varᵢₙ in links.in
-            push!(edges₁, varᵢₙ => var)
+        for varᵢ in links.in
+            push!(edges₁, varᵢ => var)
         end
         for varₒ in links.out
             push!(edges₂, var => varₒ)
@@ -58,6 +58,8 @@ end
     @test SpreadRows.get_nonindexed_vars(:(a + b[t]), :t) == Set([:a])
     @test SpreadRows.get_nonindexed_vars(:a, :t) == Set([:a])
     @test SpreadRows.get_nonindexed_vars(:(a + b[t] + c + t), :t) == Set([:a, :c])
+    @test SpreadRows.get_nonindexed_vars(:(a[t+1] + b[t] + c + t), :t) == Set([:c])
+    @test SpreadRows.get_nonindexed_vars(:(a[foo(2^t)+1] + b[t] + c + t), :t) == Set([:c])
 end
 
 @testitem "expr_is_linear" begin
