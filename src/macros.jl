@@ -75,7 +75,7 @@ function spreadconfig_to_expr(spreadconfig::SpreadConfig)
         )
     end
 
-    (lastvar, _) = last(spreadconfig.formulas)
+    (lastvar, _) = last_item(spreadconfig.formulas)
     push!(expr.args, lastvar)
 
     # If we have a function, return the inner variables as named tuples

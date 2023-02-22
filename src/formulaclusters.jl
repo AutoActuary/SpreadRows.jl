@@ -139,7 +139,7 @@ function formula_cluster_to_expr(
             eq = Expr(:(=), var, e)
             initwrap(
                 var,
-                if spreadformula.line === nothing
+                if spreadformula.line in (nothing, :nothing)
                     eq
                 else
                     Expr(:block, spreadformula.line, eq)
@@ -151,7 +151,7 @@ function formula_cluster_to_expr(
             eq = Expr(:(=), var, Expr(:comprehension, Expr(:generator, e, Expr(:(=), x, X))))
             initwrap(
                 var,
-                if spreadformula.line === nothing
+                if spreadformula.line in (nothing, :nothing)
                     eq
                 else
                     Expr(:block, spreadformula.line, eq)
@@ -179,14 +179,18 @@ function formula_cluster_to_expr(
         definitions = Expr(:block)
         for var in seq
             eq = Expr(:(=), var, Expr(:call, :Vector, :undef, Expr(:call, :length, X)))
-            push!(definitions.args, initwrap(
-                var,
-                if formulas[var].line === nothing
-                    eq
-                else
-                    Expr(:block, formulas[var].line, eq)
-                end,
-            ))
+
+            push!(
+                definitions.args,
+                initwrap(
+                    var,
+                    if formulas[var].line in (nothing, :nothing)
+                        eq
+                    else
+                        Expr(:block, formulas[var].line, eq)
+                    end,
+                ),
+            )
         end
 
         loopover = rtype > 0 ? Expr(:call, reverse, X) : X
@@ -194,12 +198,16 @@ function formula_cluster_to_expr(
         f_bounds = boundrycheck_transformer(seq)
         assignments = Expr(:block)
         for var in seq
-            if formulas[var].line !== nothing
+            if formulas[var].line in (nothing, :nothing)
                 push!(assignments.args, formulas[var].line)
             end
             push!(
                 assignments.args,
-                Expr(:(=), Expr(:ref, var, x), MacroTools.postwalk(f_bounds, formulas[var].expr))
+                Expr(
+                    :(=),
+                    Expr(:ref, var, x),
+                    MacroTools.postwalk(f_bounds, formulas[var].expr),
+                ),
             )
         end
 

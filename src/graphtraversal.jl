@@ -10,21 +10,46 @@ struct DiGraph{T}
     DiGraph{T}() where {T} = new{T}(Dict{T,DiNode{T}}())
 end
 
-traversalsequence(graph::DiGraph{T}) where {T} = traversalsequence!(deepcopy(graph))
+function traversalsequence(graph::DiGraph{T}; preferred_order=nothing) where {T}
+    return traversalsequence!(deepcopy(graph); preferred_order=preferred_order)
+end
 
-function traversalsequence!(graph::DiGraph{T}) where {T}
-    headseq = Vector{T}()
-    tailseq = Vector{T}()
-    queue = Vector{T}() # Ordered set is better
-    strongclusters = Dict{T,Set{T}}()
+function traversalsequence!(graph::DiGraph{T}; preferred_order=nothing) where {T}
+    order_lookup = DefaultDict{T,Int}(
+        typemax(Int),
+        (
+            node => order for
+            (order, node) in enumerate(preferred_order !== nothing ? preferred_order : [])
+        )...,
+    )
+    head_seq = Vector{T}()
+    tail_seq = Vector{T}()
+    head_queue = SortedSet{Tuple{Int,T}}() # store order and item
+    tail_queue = SortedSet{Tuple{Int,T}}() # store order and item
+    strong_clusters = Dict{T,SortedSet{Tuple{Int,T}}}()
 
+    # Functionality to pop from the head or tail queue
+    pop_head_queue!() = last(pop!(head_queue))
+    pop_tail_queue!() = begin
+        delete!(
+            tail_queue,
+            begin
+                item = last(tail_queue)
+            end,
+        )
+        last(item)
+    end
+
+    # Functionality to add to the head or tail queue
     function add_to_queue_if_root_or_leaf_and_prune_graph!(id)
-        if length(graph.nodedict[id].in) * length(graph.nodedict[id].out) == 0
-            push!(queue, id)
+        if length(graph.nodedict[id].in) == 0
+            push!(head_queue, (order_lookup[id], id))
+        elseif length(graph.nodedict[id].out) == 0
+            push!(tail_queue, (order_lookup[id], id))
         end
     end
 
-    # Only valid if there are no branches or roots left
+    # Find cyclic nodes (not leaves or roots allowed -- pre-trimmed branches)
     function find_cycle_in_trimmed_graph()
         id = first(keys(graph.nodedict))
 
@@ -52,7 +77,7 @@ function traversalsequence!(graph::DiGraph{T}) where {T}
         )
     end
 
-    # for a group of ids merge together into single node
+    # Merge group of ids (like cyclic nodes) into a single super node
     function merge_ids_in_graph!(ids)
         idₙ = ids[1] # reuse the first ID
         nodeₙ = DiNode{T}()
@@ -87,42 +112,46 @@ function traversalsequence!(graph::DiGraph{T}) where {T}
         end
 
         graph.nodedict[idₙ] = nodeₙ
-        strongclusters[idₙ] = Set{T}(ids) ∪ get(strongclusters, idₙ, [])
+        strong_clusters[idₙ] = union!(
+            get(strong_clusters, idₙ, SortedSet{Tuple{Int,T}}()),
+            ((order_lookup[id], id) for id in ids),
+        )
 
         # merge cluster with other strong clusters
-        for idₘ in setdiff!(ids ∩ keys(strongclusters), [idₙ])
-            push!(strongclusters[idₙ], pop!(strongclusters, idₘ)...)
+        for idₘ in setdiff!(ids ∩ keys(strong_clusters), [idₙ])
+            strong_clusters[idₙ] = union!(strong_clusters[idₙ], pop!(strong_clusters, idₘ))
         end
 
         return idₙ
     end
 
+    # The traversal algorithm
     for (id, node) in graph.nodedict
         add_to_queue_if_root_or_leaf_and_prune_graph!(id)
     end
 
     while (length(graph.nodedict) != 0)
-        if length(queue) == 0
+        if length(head_queue) == 0 && length(tail_queue) == 0
             # find a cycle and merge it
             seq = find_cycle_in_trimmed_graph()
             idₙ = merge_ids_in_graph!(seq)
             add_to_queue_if_root_or_leaf_and_prune_graph!(idₙ)
 
         else
-            idᵢ = pop!(queue)
+            idᵢ = isempty(head_queue) ? pop_tail_queue!() : pop_head_queue!()
             nodeᵢ = get(graph.nodedict, idᵢ, nothing)
             nodeᵢ === nothing && continue
 
-            # trim either a root or a branch
+            # trim either a root or a leaf
             if length(nodeᵢ.in) == 0
-                push!(headseq, idᵢ)
+                push!(head_seq, idᵢ)
                 for idⱼ in nodeᵢ.out
                     pop!(graph.nodedict[idⱼ].in, idᵢ)
                     add_to_queue_if_root_or_leaf_and_prune_graph!(idⱼ)
                 end
 
             elseif length(nodeᵢ.out) == 0
-                insert!(tailseq, 1, idᵢ)
+                insert!(tail_seq, 1, idᵢ)
                 for idⱼ in nodeᵢ.in
                     pop!(graph.nodedict[idⱼ].out, idᵢ)
                     add_to_queue_if_root_or_leaf_and_prune_graph!(idⱼ)
@@ -134,7 +163,8 @@ function traversalsequence!(graph::DiGraph{T}) where {T}
     end
 
     sequence = [
-        collect(get(strongclusters, i, (i,))) for i in Iterators.flatten((headseq, tailseq))
+        last.(get(strong_clusters, i, [(nothing, i)])) for
+        i in Iterators.flatten((head_seq, tail_seq))
     ]
     return sequence
 end
