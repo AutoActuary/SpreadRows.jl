@@ -89,7 +89,7 @@ function formula_cluster_topology(formulas::OrderedDict, x::Symbol)
     end
 
     # Get sequence... flatten... append lost keys
-    sequence = traversalsequence!(DiGraph(edges))
+    sequence = traversal_sequence!(DiGraph(edges))
     sequence = [var for cluster in sequence for var in cluster]
 
     # Put the leftovers kinda in the same order than found

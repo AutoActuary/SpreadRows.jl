@@ -344,7 +344,7 @@ end
         graph₁.nodedict[k].in == graph₂.nodedict[k].in for k in keys(graph₁.nodedict)
     ])
 
-    @test SpreadRows.traversalsequence(graph₁) ==
+    @test SpreadRows.traversal_sequence(graph₁) ==
         [[:x1], [:x2], [:x3, :x4, :x5, :x8], [:x6], [:x7], [:x9]]
 
     deps = Dict{Symbol,Vector{Symbol}}(
@@ -358,6 +358,6 @@ end
         :x10 => [],
     )
     graph₃ = SpreadRows.DiGraph(deps)
-    @test SpreadRows.traversalsequence(graph₃) ==
+    @test SpreadRows.traversal_sequence(graph₃) ==
         [[:x10], [:x1], [:x2], [:x3, :x4, :x5, :x8], [:x6], [:x7], [:x9]]
 end

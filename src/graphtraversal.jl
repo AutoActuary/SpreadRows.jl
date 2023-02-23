@@ -11,19 +11,17 @@ struct DiGraph{T}
     DiGraph{T}(DT) where {T} where {D} = new{T}(dicttype{T,DiNode{T}}())
 end
 
-function traversalsequence(graph::DiGraph{T}; preferred_order=nothing) where {T}
-    return traversalsequence!(deepcopy(graph); preferred_order=preferred_order)
+function traversal_sequence(graph::DiGraph{T}; preferred_order=nothing) where {T}
+    return traversal_sequence!(deepcopy(graph); preferred_order=preferred_order)
 end
 
-function traversalsequence!(graph::DiGraph{T}; preferred_order=nothing) where {T}
+function traversal_sequence!(graph::DiGraph{T}; preferred_order=nothing) where {T}
     # Optional preferred ordering in which traversal should be attempted
-    order_lookup = DefaultDict{T,Int}(
-        typemax(Int),
-        (
-            node => order for
-            (order, node) in enumerate(preferred_order !== nothing ? preferred_order : [])
-        )...,
-    )
+    order_lookup = DefaultDict{T,Int}(typemax(Int))
+    for (order, node) in enumerate(preferred_order !== nothing ? preferred_order : [])
+        order_lookup[node] = order
+    end
+
     head_seq = Vector{T}()
     tail_seq = Vector{T}()
     head_queue = SortedSet{Tuple{Int,T}}() # store order and item
@@ -163,7 +161,6 @@ function traversalsequence!(graph::DiGraph{T}; preferred_order=nothing) where {T
             pop!(graph.nodedict, idᵢ)
         end
     end
-
 
     sequence = [
         last.(get(strong_clusters, i, [(nothing, i)])) for

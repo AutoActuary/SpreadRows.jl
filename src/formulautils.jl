@@ -174,20 +174,7 @@ formulas_to_digraph(formulas::OrderedDict{Symbol,SpreadFormula})::DiGraph{Symbol
             haskey(formulas, varᵢ) && push!(symbol_links[varᵢ], varⱼ)
         end
     end
-    SpreadRows.DiGraph(symbol_links)
-end
-
-"
-Calculate the possible calculation sequence of a graph
-"
-function generate_calculation_sequence(graph::DiGraph; preferred_sequence=nothing)
-    sequence = SpreadRows.traversalsequence(graph)
-    if preferred_sequence !== nothing
-        sequence_bias = OrderedDict(var => i for (i, var) in enumerate(preferred_sequence))
-        sequence = [sort(clus; by=x -> (sequence_bias[x])) for clus in sequence]
-    end
-
-    return sequence
+    DiGraph(symbol_links)
 end
 
 function expr_to_formulas(expr, x::Symbol; line::Union{Nothing,LineNumberNode}=nothing)
@@ -280,8 +267,8 @@ function boundrycheck_transformer(vars)
             end
 
             @gensymx i
-            ival = SpreadRows.replace_var(
-                SpreadRows.replace_var(x.args[2], :begin, Expr(:call, firstindex, var)),
+            ival = replace_var(
+                replace_var(x.args[2], :begin, Expr(:call, firstindex, var)),
                 :end,
                 Expr(:call, lastindex, var),
             )

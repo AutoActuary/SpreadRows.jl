@@ -239,8 +239,8 @@ function construct_formula_sequence!(spreadconfig::SpreadConfig)
 
     # Generate the graph and cluster order
     graph = formulas_to_digraph(formulas)
-    ordered_clusters = generate_calculation_sequence(
-        graph; preferred_sequence=keys(formulas)
+    ordered_clusters = traversal_sequence(
+        graph; preferred_order=keys(formulas)
     )
 
     spreadconfig.formulas = formulas
