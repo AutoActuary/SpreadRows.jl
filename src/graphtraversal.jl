@@ -6,8 +6,9 @@ struct DiNode{T}
 end
 
 struct DiGraph{T}
-    nodedict::Dict{T,DiNode{T}}
+    nodedict::AbstractDict{T,DiNode{T}}
     DiGraph{T}() where {T} = new{T}(Dict{T,DiNode{T}}())
+    DiGraph{T}(DT) where {T} where {D} = new{T}(dicttype{T,DiNode{T}}())
 end
 
 function traversalsequence(graph::DiGraph{T}; preferred_order=nothing) where {T}
@@ -15,6 +16,7 @@ function traversalsequence(graph::DiGraph{T}; preferred_order=nothing) where {T}
 end
 
 function traversalsequence!(graph::DiGraph{T}; preferred_order=nothing) where {T}
+    # Optional preferred ordering in which traversal should be attempted
     order_lookup = DefaultDict{T,Int}(
         typemax(Int),
         (
@@ -162,6 +164,7 @@ function traversalsequence!(graph::DiGraph{T}; preferred_order=nothing) where {T
         end
     end
 
+
     sequence = [
         last.(get(strong_clusters, i, [(nothing, i)])) for
         i in Iterators.flatten((head_seq, tail_seq))
@@ -186,7 +189,7 @@ function DiGraph(edges::Vector{<:Union{Vector{T},Tuple{T,T}}}) where {T}
     return graph
 end
 
-function DiGraph(mapping::Dict{T,<:Union{Vector{T},Set{T}}}) where {T}
+function DiGraph(mapping::AbstractDict{T,<:Union{Vector{T},Set{T}}}) where {T}
     graph = DiGraph{T}()
 
     for (i, outs) in mapping
