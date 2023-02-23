@@ -58,8 +58,8 @@ end
     @test SpreadRows.get_nonindexed_vars(:(a + b[t]), :t) == Set([:a])
     @test SpreadRows.get_nonindexed_vars(:a, :t) == Set([:a])
     @test SpreadRows.get_nonindexed_vars(:(a + b[t] + c + t), :t) == Set([:a, :c])
-    @test SpreadRows.get_nonindexed_vars(:(a[t+1] + b[t] + c + t), :t) == Set([:c])
-    @test SpreadRows.get_nonindexed_vars(:(a[foo(2^t)+1] + b[t] + c + t), :t) == Set([:c])
+    @test SpreadRows.get_nonindexed_vars(:(a[t + 1] + b[t] + c + t), :t) == Set([:c])
+    @test SpreadRows.get_nonindexed_vars(:(a[foo(2^t) + 1] + b[t] + c + t), :t) == Set([:c])
 end
 
 @testitem "expr_is_linear" begin
@@ -134,7 +134,6 @@ end
         Expr(:block, :(T = 1:10), SpreadRows.formula_cluster_to_expr(dict, :t, :T), :B)
     ) isa Vector
 end
-
 
 @testitem "SpreadConfig" begin
     @test SpreadRows.SpreadConfig(:(x ∈ X = 1:10), :(
@@ -268,8 +267,35 @@ end
     end
 
     @test test₃().age_t0 == 30
+end
 
-    [test₃(; T=(1:40), premium_t0=10 + x / 10).liability[30] for x in 50:10:500]
+@testitem "dont add nothing linenumbers" begin
+    include("helpers.jl")
+
+    @spread f₂(t ∈ T;) = begin
+        a[t] = b[t]
+        b[t] = if t == 1
+            1
+        else
+            a[t - 1]
+        end
+    end
+
+    @test f₂(1:10).a == f₂(1:10).b
+
+    expr = :(f₂(t ∈ T;) = begin
+        a[t] = b[t]
+        b[t] = if t == 1
+            1
+        else
+            a[t - 1]
+        end
+    end)
+
+    expr = postwalk(x -> x isa LineNumberNode ? nothing : x, expr)
+
+    expr = SpreadRows.spreadconfig_to_expr(SpreadRows.SpreadConfig(expr))
+
 end
 
 @testitem "graphtraversal" begin
@@ -319,7 +345,7 @@ end
     ])
 
     @test SpreadRows.traversalsequence(graph₁) ==
-        [[:x1], [:x2], [:x5, :x3, :x8, :x4], [:x9], [:x6], [:x7]]
+        [[:x1], [:x2], [:x3, :x4, :x5, :x8], [:x6], [:x7], [:x9]]
 
     deps = Dict{Symbol,Vector{Symbol}}(
         :x1 => [:x1, :x2],
@@ -333,5 +359,5 @@ end
     )
     graph₃ = SpreadRows.DiGraph(deps)
     @test SpreadRows.traversalsequence(graph₃) ==
-        [[:x10], [:x1], [:x2], [:x5, :x3, :x8, :x4], [:x9], [:x6], [:x7]]
+        [[:x10], [:x1], [:x2], [:x3, :x4, :x5, :x8], [:x6], [:x7], [:x9]]
 end

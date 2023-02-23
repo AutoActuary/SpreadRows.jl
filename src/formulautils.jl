@@ -242,7 +242,7 @@ end
 "
 Last item in an OrderedDict
 "
-function last(d::OrderedDict)
+function last_item(d::OrderedDict)
     for (i, item) in enumerate(d)
         i == length(d) && return item
     end
